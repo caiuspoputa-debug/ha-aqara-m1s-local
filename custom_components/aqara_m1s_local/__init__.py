@@ -14,7 +14,9 @@ from .client import AqaraM1SClient
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.BUTTON, Platform.SELECT, Platform.TEXT]
+# Keep this conservative: button + select are widely supported.
+# v0.2 used Platform.TEXT and could break setup on some HA versions.
+PLATFORMS: list[Platform] = [Platform.BUTTON, Platform.SELECT]
 
 SERVICE_PLAY_URL = "play_url"
 SERVICE_PLAY_BUILTIN = "play_builtin"
@@ -23,7 +25,7 @@ SERVICE_RUN_COMMAND = "run_command"
 SERVICE_PLAY_URL_SCHEMA = vol.Schema({
     vol.Required(CONF_HOST): cv.string,
     vol.Optional(CONF_PORT, default=DEFAULT_PORT): cv.port,
-    vol.Required("url"): cv.url,
+    vol.Required("url"): cv.string,
 })
 
 SERVICE_PLAY_BUILTIN_SCHEMA = vol.Schema({

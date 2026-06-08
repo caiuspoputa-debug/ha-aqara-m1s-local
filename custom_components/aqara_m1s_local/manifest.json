@@ -1,11 +1,13 @@
 {
   "domain": "aqara_m1s_local",
   "name": "Aqara M1S Local",
-  "codeowners": ["@caiuspoputa-debug"],
+  "codeowners": [
+    "@caiuspoputa-debug"
+  ],
   "config_flow": true,
   "documentation": "https://github.com/caiuspoputa-debug/ha-aqara-m1s-local",
   "issue_tracker": "https://github.com/caiuspoputa-debug/ha-aqara-m1s-local/issues",
   "iot_class": "local_push",
   "requirements": [],
-  "version": "0.2.0"
+  "version": "0.2.1"
 }

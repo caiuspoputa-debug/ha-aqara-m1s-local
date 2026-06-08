@@ -7,8 +7,8 @@ Home Assistant custom integration for local Aqara M1S audio control over a root 
 - UI config flow for multiple hubs
 - Built-in sound buttons
 - Built-in sound selector
-- Custom Audio URL text field
-- Play Custom URL button
+- Play selected sound button
+- Play custom URL button
 - Services for `play_url`, `play_builtin`, and `run_command`
 
 ## Hub requirement
@@ -19,17 +19,16 @@ On the Aqara M1S hub, start a no-login shell on port 2323:
 telnetd -p 2323 -l /bin/sh
 ```
 
-## Audio URL example
+## Audio URL
 
-Put a WAV file in Home Assistant:
+Set the URL when adding the integration or via Configure/Options.
 
-```text
-/config/www/test.wav
-```
-
-Use URL:
+Example:
 
 ```text
 http://HA_IP:8123/local/test.wav
 ```
 
+## Notes
+
+v0.2.1 removes the Home Assistant `text` entity platform to avoid setup failures on HA versions where `Platform.TEXT` is unavailable or incompatible.

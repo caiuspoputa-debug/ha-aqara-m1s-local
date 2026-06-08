@@ -8,7 +8,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, DATA_CLIENTS, DATA_SELECTED_SOUND, DATA_PLAYBACK_VOLUME
+from .const import DOMAIN, DATA_CLIENTS, DATA_SELECTED_SOUND
 from . import build_play_command
 
 
@@ -61,8 +61,7 @@ class AqaraM1SSelectedSoundButton(ButtonEntity):
         path = self.hass.data[DOMAIN][DATA_SELECTED_SOUND].get(self.entry.entry_id)
         if not path:
             return
-        vol = self.hass.data[DOMAIN][DATA_PLAYBACK_VOLUME].get(self.entry.entry_id, 20)
-        await self.hass.async_add_executor_job(self.client.run_command, build_play_command(path, vol))
+        await self.hass.async_add_executor_job(self.client.run_command, build_play_command(path))
 
 
 class AqaraM1SSoundButton(ButtonEntity):
@@ -81,5 +80,4 @@ class AqaraM1SSoundButton(ButtonEntity):
         }
 
     async def async_press(self) -> None:
-        vol = self.hass.data[DOMAIN][DATA_PLAYBACK_VOLUME].get(self.entry.entry_id, 20)
-        await self.hass.async_add_executor_job(self.client.run_command, build_play_command(self.path, vol))
+        await self.hass.async_add_executor_job(self.client.run_command, build_play_command(self.path))

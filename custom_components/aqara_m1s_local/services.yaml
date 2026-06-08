@@ -1,0 +1,47 @@
+play_builtin:
+  name: Play builtin sound
+  description: Play one of the built-in Aqara M1S WAV files.
+  fields:
+    entry_id:
+      name: Config entry ID
+      description: Optional config entry ID. If omitted, the first configured hub is used.
+      required: false
+      selector:
+        text:
+    sound:
+      name: Sound
+      description: Built-in sound key or full WAV path on the hub.
+      required: true
+      selector:
+        text:
+
+play_url:
+  name: Play WAV URL
+  description: Download a WAV file from URL to the hub and play it.
+  fields:
+    entry_id:
+      name: Config entry ID
+      required: false
+      selector:
+        text:
+    url:
+      name: URL
+      description: WAV URL, for example http://HA_IP:8123/local/test.wav
+      required: true
+      selector:
+        text:
+
+run_command:
+  name: Run shell command
+  description: Run a shell command on the M1S through the unlocked telnet shell.
+  fields:
+    entry_id:
+      name: Config entry ID
+      required: false
+      selector:
+        text:
+    command:
+      name: Command
+      required: true
+      selector:
+        text:

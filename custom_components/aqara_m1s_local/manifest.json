@@ -1,0 +1,11 @@
+{
+  "domain": "aqara_m1s_local",
+  "name": "Aqara M1S Local",
+  "codeowners": [],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://example.local/aqara_m1s_local",
+  "iot_class": "local_push",
+  "requirements": [],
+  "version": "0.1.0"
+}

@@ -1,120 +1,96 @@
 from __future__ import annotations
 
 import logging
-import socket
-
-import voluptuous as vol
-
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
 from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.const import CONF_HOST, CONF_PORT, CONF_USERNAME, CONF_PASSWORD
+from homeassistant.helpers import device_registry as dr
+from homeassistant.components import button, sensor, select
 
-from .const import BUILTIN_SOUNDS, DEFAULT_TIMEOUT, DOMAIN
+from .const import (
+    DOMAIN,
+    DEFAULT_PORT,
+    DEFAULT_USERNAME,
+    DEFAULT_PASSWORD,
+    SERVICE_PLAY_URL,
+    SERVICE_PLAY_SOUND,
+    SERVICE_RUN_COMMAND,
+    DATA_CLIENTS,
+    DATA_SELECTED_SOUND,
+)
+from .client import AqaraM1SClient
 
 _LOGGER = logging.getLogger(__name__)
 
-# Keep v0.1 architecture: button only. This is the stable part that already worked.
-PLATFORMS = ["button"]
-
-
-def _run_command(host: str, port: int, command: str, timeout: int = DEFAULT_TIMEOUT) -> str:
-    """Run a command through the no-login telnet shell on the hub."""
-    with socket.create_connection((host, int(port)), timeout=timeout) as sock:
-        sock.settimeout(timeout)
-        sock.sendall((command.rstrip() + "\n").encode())
-        try:
-            return sock.recv(4096).decode(errors="ignore")
-        except Exception:
-            return ""
-
-
-def _play_builtin(host: str, port: int, sound: str) -> str:
-    """Play a built-in sound by key or a full path."""
-    path = BUILTIN_SOUNDS.get(sound, sound)
-    return _run_command(host, port, f"aplay '{path}'")
-
-
-def _play_url(host: str, port: int, url: str) -> str:
-    """Download a WAV file and play it."""
-    # keep this deliberately simple for BusyBox shell
-    safe_url = str(url).replace("'", "")
-    command = f"wget '{safe_url}' -O /tmp/ha_audio.wav && aplay /tmp/ha_audio.wav"
-    return _run_command(host, port, command)
-
-
-def _get_entry_data(hass: HomeAssistant, entry_id: str | None):
-    entries = hass.data.get(DOMAIN, {})
-    if entry_id:
-        return entries.get(entry_id)
-    if entries:
-        return next(iter(entries.values()))
-    return None
+PLATFORMS = [button.DOMAIN, sensor.DOMAIN, select.DOMAIN]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up Aqara M1S Local from a config entry."""
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = entry.data
+    host = entry.data[CONF_HOST]
+    port = entry.data.get(CONF_PORT, DEFAULT_PORT)
+    username = entry.data.get(CONF_USERNAME, DEFAULT_USERNAME)
+    password = entry.data.get(CONF_PASSWORD, DEFAULT_PASSWORD)
+
+    client = AqaraM1SClient(host=host, port=port, username=username, password=password)
+
+    hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN].setdefault(DATA_CLIENTS, {})
+    hass.data[DOMAIN].setdefault(DATA_SELECTED_SOUND, {})
+    hass.data[DOMAIN][DATA_CLIENTS][entry.entry_id] = client
+    hass.data[DOMAIN][DATA_SELECTED_SOUND][entry.entry_id] = "/data/musics/music-scene/door_bell_1.wav"
+
+    device_registry = dr.async_get(hass)
+    device_registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, host)},
+        name=entry.data.get("name", f"Aqara M1S {host}"),
+        manufacturer="Aqara",
+        model="M1S",
+    )
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    async def handle_play_builtin(call: ServiceCall) -> None:
-        data = _get_entry_data(hass, call.data.get("entry_id"))
-        if not data:
-            raise ValueError("No Aqara M1S Local device configured")
-        await hass.async_add_executor_job(
-            _play_builtin,
-            data[CONF_HOST],
-            data[CONF_PORT],
-            call.data["sound"],
-        )
+    async def _get_client(call: ServiceCall) -> AqaraM1SClient:
+        call_host = call.data.get("host")
+        if call_host:
+            for c in hass.data[DOMAIN][DATA_CLIENTS].values():
+                if c.host == call_host:
+                    return c
+            return AqaraM1SClient(
+                host=call_host,
+                port=call.data.get("port", DEFAULT_PORT),
+                username=call.data.get("username", DEFAULT_USERNAME),
+                password=call.data.get("password", DEFAULT_PASSWORD),
+            )
+        return hass.data[DOMAIN][DATA_CLIENTS][entry.entry_id]
 
-    async def handle_play_url(call: ServiceCall) -> None:
-        data = _get_entry_data(hass, call.data.get("entry_id"))
-        if not data:
-            raise ValueError("No Aqara M1S Local device configured")
-        await hass.async_add_executor_job(
-            _play_url,
-            data[CONF_HOST],
-            data[CONF_PORT],
-            call.data["url"],
-        )
+    async def play_url(call: ServiceCall) -> None:
+        client = await _get_client(call)
+        url = call.data["url"]
+        cmd = f'wget -q "{url}" -O /tmp/ha_audio.wav && aplay /tmp/ha_audio.wav'
+        await hass.async_add_executor_job(client.run_command, cmd)
 
-    async def handle_run_command(call: ServiceCall) -> None:
-        data = _get_entry_data(hass, call.data.get("entry_id"))
-        if not data:
-            raise ValueError("No Aqara M1S Local device configured")
-        await hass.async_add_executor_job(
-            _run_command,
-            data[CONF_HOST],
-            data[CONF_PORT],
-            call.data["command"],
-        )
+    async def play_sound(call: ServiceCall) -> None:
+        client = await _get_client(call)
+        path = call.data["path"]
+        cmd = f'aplay "{path}"'
+        await hass.async_add_executor_job(client.run_command, cmd)
 
-    # Register services once, even with multiple hubs.
-    if not hass.services.has_service(DOMAIN, "play_builtin"):
-        hass.services.async_register(
-            DOMAIN,
-            "play_builtin",
-            handle_play_builtin,
-            schema=vol.Schema({vol.Optional("entry_id"): str, vol.Required("sound"): str}),
-        )
-        hass.services.async_register(
-            DOMAIN,
-            "play_url",
-            handle_play_url,
-            schema=vol.Schema({vol.Optional("entry_id"): str, vol.Required("url"): str}),
-        )
-        hass.services.async_register(
-            DOMAIN,
-            "run_command",
-            handle_run_command,
-            schema=vol.Schema({vol.Optional("entry_id"): str, vol.Required("command"): str}),
-        )
+    async def run_command(call: ServiceCall) -> None:
+        client = await _get_client(call)
+        cmd = call.data["command"]
+        await hass.async_add_executor_job(client.run_command, cmd)
+
+    hass.services.async_register(DOMAIN, SERVICE_PLAY_URL, play_url)
+    hass.services.async_register(DOMAIN, SERVICE_PLAY_SOUND, play_sound)
+    hass.services.async_register(DOMAIN, SERVICE_RUN_COMMAND, run_command)
 
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if unload_ok:
-        hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
-    return unload_ok
+    unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unloaded:
+        hass.data[DOMAIN][DATA_CLIENTS].pop(entry.entry_id, None)
+        hass.data[DOMAIN][DATA_SELECTED_SOUND].pop(entry.entry_id, None)
+    return unloaded

@@ -1,25 +1,11 @@
 from __future__ import annotations
 
-import socket
-
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
+from homeassistant.const import CONF_HOST, CONF_PORT, CONF_USERNAME, CONF_PASSWORD
 
-from .const import DEFAULT_PORT, DEFAULT_TIMEOUT, DOMAIN
-
-
-def _test_shell(host: str, port: int) -> None:
-    """Test that the no-login shell is open."""
-    with socket.create_connection((host, int(port)), timeout=DEFAULT_TIMEOUT) as sock:
-        sock.settimeout(DEFAULT_TIMEOUT)
-        sock.sendall(b"echo M1S_OK\n")
-        try:
-            sock.recv(256)
-        except Exception:
-            # Some telnetd sessions do not answer immediately. Open socket is enough.
-            pass
+from .const import DOMAIN, DEFAULT_PORT, DEFAULT_USERNAME, DEFAULT_PASSWORD
 
 
 class AqaraM1SLocalConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -29,31 +15,22 @@ class AqaraM1SLocalConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
 
         if user_input is not None:
-            host = user_input[CONF_HOST].strip()
-            port = int(user_input.get(CONF_PORT, DEFAULT_PORT))
-            name = user_input.get(CONF_NAME) or f"Aqara M1S {host}"
-
-            await self.async_set_unique_id(f"{host}:{port}")
+            await self.async_set_unique_id(user_input[CONF_HOST])
             self._abort_if_unique_id_configured()
 
-            try:
-                await self.hass.async_add_executor_job(_test_shell, host, port)
-            except Exception:
-                errors["base"] = "cannot_connect"
-            else:
-                return self.async_create_entry(
-                    title=name,
-                    data={CONF_HOST: host, CONF_PORT: port, CONF_NAME: name},
-                )
+            return self.async_create_entry(
+                title=user_input.get("name") or f"Aqara M1S {user_input[CONF_HOST]}",
+                data=user_input,
+            )
 
-        return self.async_show_form(
-            step_id="user",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_HOST): str,
-                    vol.Optional(CONF_PORT, default=DEFAULT_PORT): int,
-                    vol.Optional(CONF_NAME): str,
-                }
-            ),
-            errors=errors,
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_HOST): str,
+                vol.Optional(CONF_PORT, default=DEFAULT_PORT): int,
+                vol.Optional(CONF_USERNAME, default=DEFAULT_USERNAME): str,
+                vol.Optional(CONF_PASSWORD, default=DEFAULT_PASSWORD): str,
+                vol.Optional("name", default="Aqara M1S Local"): str,
+            }
         )
+
+        return self.async_show_form(step_id="user", data_schema=schema, errors=errors)

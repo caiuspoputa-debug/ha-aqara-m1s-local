@@ -1,50 +1,68 @@
-play_builtin:
-  name: Play built-in sound
-  description: Play one of the built-in Aqara M1S WAV files, or a full WAV path on the hub.
+play_url:
+  name: Play URL
+  description: Download a WAV URL to /tmp and play it on the Aqara M1S.
   fields:
-    entry_id:
-      name: Config entry ID
-      description: Optional config entry ID. If omitted, the first configured hub is used.
+    host:
+      name: Host
       required: false
       selector:
         text:
-    sound:
-      name: Sound
-      description: Built-in sound key such as bell, alarm, disarm, arm_ok, welcome_1, or a full WAV path.
+    port:
+      name: Port
+      required: false
+      default: 23
+      selector:
+        number:
+          min: 1
+          max: 65535
+    url:
+      name: URL
       required: true
       selector:
         text:
 
-play_url:
-  name: Play WAV URL
-  description: Download a WAV file from a URL to the hub and play it with aplay.
+play_sound:
+  name: Play Sound
+  description: Play a WAV file already present on the Aqara M1S filesystem.
   fields:
-    entry_id:
-      name: Config entry ID
-      description: Optional config entry ID. If omitted, the first configured hub is used.
+    host:
+      name: Host
       required: false
       selector:
         text:
-    url:
-      name: URL
-      description: WAV URL, for example http://HA_IP:8123/local/test.wav
+    port:
+      name: Port
+      required: false
+      default: 23
+      selector:
+        number:
+          min: 1
+          max: 65535
+    path:
+      name: Path
       required: true
       selector:
         text:
 
 run_command:
-  name: Run shell command
-  description: Run a shell command on the M1S through the unlocked telnet shell.
+  name: Run Command
+  description: Run a shell command on the Aqara M1S over Telnet.
   fields:
-    entry_id:
-      name: Config entry ID
-      description: Optional config entry ID. If omitted, the first configured hub is used.
+    host:
+      name: Host
       required: false
       selector:
         text:
+    port:
+      name: Port
+      required: false
+      default: 23
+      selector:
+        number:
+          min: 1
+          max: 65535
     command:
       name: Command
-      description: Shell command to run on the hub.
       required: true
       selector:
         text:

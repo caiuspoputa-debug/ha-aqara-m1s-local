@@ -1,9 +1,15 @@
 DOMAIN = "aqara_m1s_local"
+DEFAULT_PORT = 2323
+DEFAULT_NAME = "Aqara M1S Local"
+
 CONF_HOST = "host"
 CONF_PORT = "port"
 CONF_NAME = "name"
-DEFAULT_PORT = 2323
-DEFAULT_TIMEOUT = 5
+
+OPT_AUDIO_URL = "audio_url"
+OPT_SELECTED_SOUND = "selected_sound"
+
+DATA_CLIENTS = "clients"
 
 BUILTIN_SOUNDS = {
     "bell": "/data/musics/music-scene/door_bell_1.wav",
@@ -25,4 +31,14 @@ BUILTIN_SOUNDS = {
     "welcome_8": "/data/musics/music-scene/welcome_8.wav",
     "welcome_9": "/data/musics/music-scene/welcome_9.wav",
     "welcome_10": "/data/musics/music-scene/welcome_10.wav",
+    "alarm_1": "/data/musics/music-scene/alarm_1.wav",
+    "alarm_2": "/data/musics/music-scene/alarm_2.wav",
+    "alarm_3": "/data/musics/music-scene/alarm_3.wav",
+    "alarm_4": "/data/musics/music-scene/alarm_4.wav",
+    "alarm_5": "/data/musics/music-scene/alarm_5.wav",
+    "alarm_6": "/data/musics/music-scene/alarm_6.wav",
+    "alarm_7": "/data/musics/music-scene/alarm_7.wav",
+    "alarm_8": "/data/musics/music-scene/alarm_8.wav",
+    "alarm_9": "/data/musics/music-scene/alarm_9.wav",
+    "clock": "/data/musics/music-scene/clock.wav",
 }

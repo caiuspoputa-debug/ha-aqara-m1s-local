@@ -1,47 +1,90 @@
-play_builtin:
-  name: Play builtin sound
-  description: Play one of the built-in Aqara M1S WAV files.
-  fields:
-    entry_id:
-      name: Config entry ID
-      description: Optional config entry ID. If omitted, the first configured hub is used.
-      required: false
-      selector:
-        text:
-    sound:
-      name: Sound
-      description: Built-in sound key or full WAV path on the hub.
-      required: true
-      selector:
-        text:
-
 play_url:
-  name: Play WAV URL
-  description: Download a WAV file from URL to the hub and play it.
+  name: Play URL
+  description: Download and play a WAV URL on an Aqara M1S hub.
   fields:
-    entry_id:
-      name: Config entry ID
-      required: false
-      selector:
-        text:
-    url:
-      name: URL
-      description: WAV URL, for example http://HA_IP:8123/local/test.wav
+    host:
       required: true
       selector:
         text:
-
-run_command:
-  name: Run shell command
-  description: Run a shell command on the M1S through the unlocked telnet shell.
-  fields:
-    entry_id:
-      name: Config entry ID
+    port:
       required: false
+      default: 2323
+      selector:
+        number:
+          min: 1
+          max: 65535
+          mode: box
+    url:
+      required: true
       selector:
         text:
+play_builtin:
+  name: Play built-in sound
+  description: Play one of the built-in WAV files on an Aqara M1S hub.
+  fields:
+    host:
+      required: true
+      selector:
+        text:
+    port:
+      required: false
+      default: 2323
+      selector:
+        number:
+          min: 1
+          max: 65535
+          mode: box
+    sound:
+      required: true
+      selector:
+        select:
+          options:
+            - bell
+            - alarm
+            - disarm
+            - arm_ok
+            - arm_start
+            - door_bell_1
+            - door_bell_2
+            - door_bell_3
+            - door_bell_4
+            - welcome_1
+            - welcome_2
+            - welcome_3
+            - welcome_4
+            - welcome_5
+            - welcome_6
+            - welcome_7
+            - welcome_8
+            - welcome_9
+            - welcome_10
+            - alarm_1
+            - alarm_2
+            - alarm_3
+            - alarm_4
+            - alarm_5
+            - alarm_6
+            - alarm_7
+            - alarm_8
+            - alarm_9
+            - clock
+run_command:
+  name: Run command
+  description: Run a raw shell command on the Aqara M1S telnet shell.
+  fields:
+    host:
+      required: true
+      selector:
+        text:
+    port:
+      required: false
+      default: 2323
+      selector:
+        number:
+          min: 1
+          max: 65535
+          mode: box
     command:
-      name: Command
       required: true
       selector:
         text:

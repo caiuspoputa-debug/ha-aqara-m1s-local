@@ -1,0 +1,212 @@
+Aqara M1S - Audio WAV custom, arm_ok.wav si redare locala
+================================================================
+
+Scop:
+- conversie MP3/WAV in format acceptat de Aqara M1S
+- testare sunet direct pe hub
+- inlocuire sunet intern arm_ok.wav
+- evitarea problemei in care aplay reda de 3 ori
+- control corect al volumului prin fisier WAV, nu prin HomeKit
+
+
+============================================================
+1. Format WAV acceptat
+============================================================
+
+Format recomandat pentru Aqara M1S:
+
+mono
+32000 Hz
+PCM S32_LE
+
+Exemplu fisier final:
+
+arm_ok.wav
+
+
+============================================================
+2. Conversie cu ffmpeg
+============================================================
+
+Dintr-un MP3/WAV sursa, conversie in format Aqara M1S:
+
+ffmpeg -y -i input.mp3 -ac 1 -ar 32000 -filter:a "volume=0.70" -c:a pcm_s32le arm_ok.wav
+
+Explicatie:
+- -ac 1 = mono
+- -ar 32000 = 32 kHz
+- volume=0.70 = volum redus la 70%
+- pcm_s32le = PCM 32-bit little-endian, acceptat de M1S
+
+Pentru mai incet:
+
+volume=0.56
+
+Pentru mai tare:
+
+volume=0.80
+
+
+============================================================
+3. Locatie HA pentru descarcare pe hub
+============================================================
+
+Pune fisierul in Home Assistant:
+
+/config/www/arm_ok.wav
+
+URL-ul devine:
+
+http://IP_HOME_ASSISTANT:8123/local/arm_ok.wav
+
+Exemplu:
+
+http://192.168.0.20:8123/local/arm_ok.wav
+
+
+============================================================
+4. Descarcare pe hub pentru test
+============================================================
+
+In Telnet pe hub:
+
+cd /tmp
+rm -f arm_ok_new.wav
+wget http://192.168.0.20:8123/local/arm_ok.wav -O arm_ok_new.wav
+ls -l arm_ok_new.wav
+
+
+============================================================
+5. Testare redare o singura data
+============================================================
+
+IMPORTANT:
+Pe acest firmware, comanda simpla:
+
+aplay arm_ok_new.wav
+
+poate reda sunetul de 3 ori.
+
+Comanda corecta pentru o singura redare este:
+
+aplay -x 1 /tmp/arm_ok_new.wav
+
+
+============================================================
+6. Backup sunet original
+============================================================
+
+Sunetul intern arm_ok.wav este aici:
+
+/data/musics/music-scene/arm_ok.wav
+
+Fa backup o singura data:
+
+cd /data/musics/music-scene
+[ -f arm_ok.wav.bak ] || cp arm_ok.wav arm_ok.wav.bak
+sync
+
+
+============================================================
+7. Inlocuire arm_ok.wav definitiv
+============================================================
+
+Dupa ce testul din /tmp suna corect:
+
+cp /tmp/arm_ok_new.wav /data/musics/music-scene/arm_ok.wav
+chmod 775 /data/musics/music-scene/arm_ok.wav
+sync
+
+Test final:
+
+aplay -x 1 /data/musics/music-scene/arm_ok.wav
+
+
+============================================================
+8. Restaurare arm_ok.wav original
+============================================================
+
+Daca vrei sa revii la sunetul original:
+
+cd /data/musics/music-scene
+cp arm_ok.wav.bak arm_ok.wav
+chmod 775 arm_ok.wav
+sync
+aplay -x 1 arm_ok.wav
+
+
+============================================================
+9. Lista sunete interne
+============================================================
+
+Cauta WAV-urile interne:
+
+find /data/musics -type f -name "*.wav" 2>/dev/null
+
+Locatii importante:
+
+/data/musics/music-scene/
+/data/musics/music-us/
+/data/musics/music-ch/
+
+Exemple utile:
+
+/data/musics/music-scene/arm_ok.wav
+/data/musics/music-scene/arm_start.wav
+/data/musics/music-scene/disarm.wav
+/data/musics/music-scene/door_bell_1.wav
+/data/musics/music-scene/alarm.wav
+
+
+============================================================
+10. Volum
+============================================================
+
+Descoperire importanta:
+
+Volumul HomeKit / Aqara:
+
+number.aqarahublight_volume
+number.aqara_hub_m1s_2653_volume
+
+si proprietatea:
+
+persist.sys.volume
+
+NU controleaza volumul pentru redarea directa cu:
+
+aplay -x 1
+
+De aceea, pentru sunete locale redate direct, volumul trebuie redus in fisierul WAV.
+
+Solutia corecta:
+- faci WAV-ul mai incet la conversie
+- folosesti volume=0.70, 0.56 etc.
+- nu te baza pe number.volume pentru aplay
+
+
+============================================================
+11. Comenzi rapide
+============================================================
+
+Descarcare:
+
+wget http://192.168.0.20:8123/local/arm_ok.wav -O /tmp/arm_ok_new.wav
+
+Test o singura data:
+
+aplay -x 1 /tmp/arm_ok_new.wav
+
+Backup:
+
+[ -f /data/musics/music-scene/arm_ok.wav.bak ] || cp /data/musics/music-scene/arm_ok.wav /data/musics/music-scene/arm_ok.wav.bak
+
+Inlocuire:
+
+cp /tmp/arm_ok_new.wav /data/musics/music-scene/arm_ok.wav
+chmod 775 /data/musics/music-scene/arm_ok.wav
+sync
+
+Test final:
+
+aplay -x 1 /data/musics/music-scene/arm_ok.wav

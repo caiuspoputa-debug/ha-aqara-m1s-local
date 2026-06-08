@@ -1,0 +1,185 @@
+Aqara M1S - Persistent Aqara Zigbee shutdown
+
+Purpose:
+- The hub boots normally on Wi-Fi.
+- Telnet stays enabled automatically.
+- Aqara Zigbee is automatically stopped after boot.
+- HomeKit, light, and sound remain active.
+- mzigbee_agent and app_monitor.sh do not run after boot.
+
+Tested on:
+- 192.168.0.44
+- 192.168.0.101
+
+
+============================================================
+1. Check if Zigbee is active
+============================================================
+
+On the hub, through Telnet:
+
+ps w | grep mzigbee
+ps w | grep app_monitor
+
+If you see:
+
+mzigbee_agent -f /etc/mzigbeeAgent.conf
+
+then Aqara Zigbee is running.
+
+If you only see:
+
+grep mzigbee
+
+then Aqara Zigbee is stopped.
+
+
+============================================================
+2. Manual test without reboot
+============================================================
+
+Run on the hub:
+
+killall app_monitor.sh 2>/dev/null
+killall mzigbee_agent 2>/dev/null
+sleep 5
+ps w | grep mzigbee
+ps w | grep app_monitor
+
+Correct result:
+
+- for mzigbee, only the grep line appears
+- for app_monitor, only the grep line appears
+
+
+============================================================
+3. Persistent script with Zigbee shutdown
+============================================================
+
+Run on the hub:
+
+mkdir -p /data/scripts
+
+cat > /data/scripts/post_init.sh <<'EOF'
+#!/bin/sh
+
+fw_manager.sh -r &
+
+(
+    i=0
+    while [ $i -lt 120 ]; do
+        IP="$(ifconfig wlan0 2>/dev/null | grep 'inet addr')"
+        if [ "$IP" != "" ]; then
+            sleep 5
+            fw_manager.sh -t -k &
+
+            # disable Aqara Zigbee service 5 sec after Telnet start
+            sleep 5
+            killall app_monitor.sh 2>/dev/null
+            killall mzigbee_agent 2>/dev/null
+
+            exit 0
+        fi
+        sleep 2
+        i=$((i+2))
+    done
+
+    fw_manager.sh -t -k &
+
+    # fallback: disable Zigbee 5 sec after Telnet start
+    sleep 5
+    killall app_monitor.sh 2>/dev/null
+    killall mzigbee_agent 2>/dev/null
+) &
+
+exit 0
+EOF
+
+chmod +x /data/scripts/post_init.sh
+sync
+
+
+============================================================
+4. Verify the script
+============================================================
+
+Run:
+
+cat /data/scripts/post_init.sh
+
+It must start with:
+
+#!/bin/sh
+
+and end with:
+
+exit 0
+
+
+============================================================
+5. Reboot
+============================================================
+
+When ready:
+
+reboot
+
+
+============================================================
+6. Check after reboot
+============================================================
+
+Enter the hub again:
+
+telnet HUB_IP
+
+Then check:
+
+ps w | grep telnet
+ps w | grep mzigbee
+ps w | grep app_monitor
+ps w | grep homekit
+ps w | grep mha
+
+Expected result:
+
+telnetd = present
+mzigbee_agent = absent, only grep appears
+app_monitor.sh = absent, only grep appears
+homekitserver = present
+mha_basis = present
+mha_master -b = present
+
+
+============================================================
+7. Restore Zigbee
+============================================================
+
+To undo the Zigbee shutdown, edit the script:
+
+vi /data/scripts/post_init.sh
+
+Delete these lines:
+
+killall app_monitor.sh 2>/dev/null
+killall mzigbee_agent 2>/dev/null
+
+or rewrite the script with Telnet persistence only, without Zigbee shutdown.
+
+Then:
+
+sync
+reboot
+
+
+============================================================
+8. Notes
+============================================================
+
+- Do not stop homekitserver.
+- Do not stop mha_basis.
+- Do not stop mha_master.
+- Do not stop miio_client.
+- These services must remain active for HomeKit, light, and sound.
+- To reduce Zigbee noise around Zigbee2MQTT, the important process to stop is mzigbee_agent.
+- app_monitor.sh restarts mzigbee_agent, so it must be stopped too.

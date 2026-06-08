@@ -1,0 +1,246 @@
+Aqara M1S - Final architecture: HomeKit + local + automations
+================================================================
+
+Purpose:
+- clarify what HomeKit should handle
+- what the local Aqara M1S integration should handle
+- what should NOT be controlled locally
+- document findings about volume, sound, light, and Zigbee
+
+
+============================================================
+1. Recommended stable architecture
+============================================================
+
+HomeKit remains responsible for:
+- hub light
+- RGB color
+- brightness
+- official volume
+- alarm_control_panel
+- pairing / identify
+
+The local Aqara M1S integration remains responsible for:
+- local WAV playback
+- play_url
+- buttons for internal sounds
+- Telnet diagnostics
+- process diagnostics
+- local temperature
+- uptime
+- Wi-Fi IP
+
+Do not force everything into one integration if HomeKit works reliably.
+
+
+============================================================
+2. Important HomeKit entities
+============================================================
+
+Hub aqarahublight:
+
+number.aqarahublight_volume
+alarm_control_panel.aqarahublight_security_system
+light.aqarahublight_lightbulb
+
+Hub aqara_hub_m1s_2653:
+
+number.aqara_hub_m1s_2653_volume
+alarm_control_panel.aqara_hub_m1s_2653_security_system
+light.aqara_hub_m1s_2653_lightbulb
+
+
+============================================================
+3. Day/night volume in automations
+============================================================
+
+Example for volume 20 at night and 60 during the day:
+
+value: >-
+  {% if now().hour >= 21 or now().hour < 9 %} 20 {% else %} 60
+  {% endif %}
+
+Example for volume 5 at night and 25 during the day:
+
+value: >-
+  {% if now().hour >= 21 or now().hour < 8 %} 5 {% else %} 25
+  {% endif %}
+
+
+============================================================
+4. Difference between trigger, action, and entity
+============================================================
+
+Trigger:
+- starts the automation
+
+Example:
+
+triggers:
+  - entity_id: binary_sensor.senzor_de_contact_1_water_leak
+    from: "off"
+    to: "on"
+    trigger: state
+
+Actions:
+- what the automation does after the trigger
+- set volume
+- start alarm
+- turn on light
+- stop alarm
+- restore scene
+
+Entities:
+- all devices/objects used in triggers or actions
+
+
+============================================================
+5. Red/green light
+============================================================
+
+Simple red -> green sequence:
+
+- continue_on_error: true
+  target:
+    entity_id: light.aqarahublight_lightbulb
+  data:
+    brightness_pct: 100
+    rgb_color:
+      - 255
+      - 0
+      - 0
+  action: light.turn_on
+
+- delay: "00:00:01"
+
+- continue_on_error: true
+  target:
+    entity_id: light.aqarahublight_lightbulb
+  data:
+    brightness_pct: 100
+    rgb_color:
+      - 0
+      - 255
+      - 0
+  action: light.turn_on
+
+For repetition:
+
+repeat:
+  count: 4
+  sequence:
+    ...
+
+
+============================================================
+6. Light snapshot
+============================================================
+
+To restore the original light state, create a snapshot scene:
+
+- data:
+    scene_id: snapshot_bec
+    snapshot_entities:
+      - light.aqarahublight_lightbulb
+  action: scene.create
+
+At the end:
+
+- continue_on_error: true
+  target:
+    entity_id: scene.snapshot_bec
+  action: scene.turn_on
+
+For two hubs:
+
+snapshot_entities:
+  - light.aqarahublight_lightbulb
+  - light.aqara_hub_m1s_2653_lightbulb
+
+
+============================================================
+7. Sound through alarm_control_panel
+============================================================
+
+Official Aqara/HomeKit sound works through:
+
+alarm_control_panel.aqarahublight_security_system
+
+Useful actions:
+
+alarm_control_panel.alarm_trigger
+alarm_control_panel.alarm_arm_night
+alarm_control_panel.alarm_arm_away
+alarm_control_panel.alarm_disarm
+
+For a simple doorbell:
+- set volume
+- start alarm / arm action
+- delay
+- set volume to 0 or disarm
+
+
+============================================================
+8. What NOT to do
+============================================================
+
+Do not remove volume blocks if they contain day/night logic.
+Do not change trigger sensors unless explicitly requested.
+Do not change entities between hubs unless explicitly requested.
+Do not delete snapshot scenes if they were in the original code.
+Do not convert dual-hub automations to single-hub unless explicitly requested.
+
+
+============================================================
+9. Aqara Zigbee
+============================================================
+
+If the hub has no paired Zigbee devices and you want to reduce noise near Zigbee2MQTT, you can stop:
+
+mzigbee_agent
+app_monitor.sh
+
+After stopping, the correct check is:
+
+ps w | grep mzigbee
+ps w | grep app_monitor
+
+If only grep appears, Aqara Zigbee is stopped.
+
+Do not stop:
+homekitserver
+mha_basis
+mha_master
+miio_client
+
+
+============================================================
+10. Important processes
+============================================================
+
+Check:
+
+ps w | grep telnet
+ps w | grep mzigbee
+ps w | grep app_monitor
+ps w | grep homekit
+ps w | grep mha
+ps w | grep miio
+
+Expected result for a hub without Aqara Zigbee:
+
+telnetd = present
+mzigbee_agent = absent
+app_monitor.sh = absent
+homekitserver -S = present
+mha_basis = present
+mha_master -b = present
+miio_client = present
+
+
+============================================================
+11. Lux
+============================================================
+
+A reliable local lux source was not found.
+Do not expose lux in the local integration until a real verified source exists.

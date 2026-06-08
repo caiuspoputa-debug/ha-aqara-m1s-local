@@ -1,0 +1,228 @@
+Aqara Hub M1S – Curatare HomeKit pairing si relansare conectare
+=================================================================
+
+Scop:
+- stergere pairing HomeKit vechi
+- pastrare Wi-Fi / MiIO / Aqara cat mai mult posibil
+- repornire HomeKit server
+- hubul sa reapara in Home Assistant la HomeKit Device
+
+ATENTIE
+-------
+Nu goli toate proprietatile care contin true.
+Nu sterge /data/storage complet.
+Nu atinge /etc/init.d/rcS, /bin/fw_manager.sh sau boot-ul.
+Lucram doar cu partea HomeKit: hap_provisioned, hap_keepalive, user_paired si folderul /data/storage/hap.
+
+
+1. Verificare stare curenta
+---------------------------
+
+Ruleaza pe hub:
+
+ps w | grep homekit
+ps w | grep mdns
+netstat -an | grep 5353
+getprop sys.hap_disable
+getprop persist.sys.hap_code
+getprop persist.app.hap_provisioned
+getprop persist.app.hap_keepalive
+getprop persist.app.user_paired
+
+Noteaza pairing code-ul:
+
+getprop persist.sys.hap_code
+
+Exemplu:
+629-02-623
+
+
+2. Backup inainte de modificari
+-------------------------------
+
+Ruleaza:
+
+cp /data/storage/prop.dat /data/storage/prop.dat.bak_homekit
+cp -a /data/storage/hap /data/storage/hap.bak_homekit 2>/dev/null
+sync
+
+Verifica:
+
+ls -l /data/storage/prop.dat.bak_homekit
+ls -l /data/storage/hap.bak_homekit 2>/dev/null
+
+
+3. Curatare pairing HomeKit
+---------------------------
+
+Ruleaza:
+
+setprop persist.app.hap_provisioned false
+setprop persist.app.hap_keepalive false
+setprop persist.app.user_paired false
+setprop sys.hap_disable false
+sync
+
+Apoi muta folderul HomeKit pairing vechi:
+
+mv /data/storage/hap /data/storage/hap.old 2>/dev/null
+mkdir -p /data/storage/hap
+sync
+
+
+4. Repornire mDNS si HomeKit server
+-----------------------------------
+
+Ruleaza:
+
+killall homekitserver 2>/dev/null
+killall mdnsd 2>/dev/null
+mdnsd
+homekitserver -S &
+sleep 10
+
+
+5. Verificare dupa repornire
+----------------------------
+
+Ruleaza:
+
+ps w | grep homekit
+ps w | grep mdns
+netstat -an | grep 5353
+getprop sys.hap_disable
+getprop persist.sys.hap_code
+getprop persist.app.hap_provisioned
+getprop persist.app.hap_keepalive
+getprop persist.app.user_paired
+
+Trebuie sa vezi:
+- homekitserver -S ruleaza
+- mdnsd ruleaza
+- UDP 5353 exista
+- sys.hap_disable nu este true
+- codul HomeKit exista
+
+
+6. Adaugare in Home Assistant
+-----------------------------
+
+In Home Assistant:
+
+Settings -> Devices & Services -> Add Integration -> HomeKit Device
+
+Daca hubul apare, selecteaza-l si introdu codul:
+
+format cu cratime:
+629-02-623
+
+sau, daca HA cere fara cratime:
+62902623
+
+
+7. Daca nu apare in HA
+----------------------
+
+Verifica mDNS:
+
+ps w | grep mdns
+netstat -an | grep 5353
+
+Daca mdnsd lipseste:
+
+mdnsd
+
+Reporneste HomeKit:
+
+killall homekitserver 2>/dev/null
+homekitserver -S &
+
+Asteapta 30 secunde si cauta din nou in HA.
+
+
+8. Daca hubul spune ca este deja paired
+---------------------------------------
+
+Verifica:
+
+getprop persist.app.hap_provisioned
+getprop persist.app.user_paired
+
+Daca sunt true, repeta pasul 3 si 4.
+
+Daca tot nu apare, da reboot:
+
+reboot
+
+Dupa reboot, asteapta Wi-Fi si Telnet, apoi cauta din nou HomeKit Device in HA.
+
+
+9. Recovery / revenire la backup
+--------------------------------
+
+Daca ceva nu merge bine, revii la backup:
+
+killall homekitserver 2>/dev/null
+rm -rf /data/storage/hap
+mv /data/storage/hap.old /data/storage/hap 2>/dev/null
+cp /data/storage/prop.dat.bak_homekit /data/storage/prop.dat
+sync
+reboot
+
+Daca ai doar backupul hap.bak_homekit:
+
+killall homekitserver 2>/dev/null
+rm -rf /data/storage/hap
+cp -a /data/storage/hap.bak_homekit /data/storage/hap
+cp /data/storage/prop.dat.bak_homekit /data/storage/prop.dat
+sync
+reboot
+
+
+10. Comenzi scurte
+------------------
+
+Citire pairing code:
+
+getprop persist.sys.hap_code
+
+Cautare pairing code in prop.dat:
+
+strings /data/storage/prop.dat | grep -i hap
+
+Curatare rapida HomeKit pairing:
+
+setprop persist.app.hap_provisioned false
+setprop persist.app.hap_keepalive false
+setprop persist.app.user_paired false
+setprop sys.hap_disable false
+mv /data/storage/hap /data/storage/hap.old 2>/dev/null
+mkdir -p /data/storage/hap
+sync
+killall homekitserver 2>/dev/null
+killall mdnsd 2>/dev/null
+mdnsd
+homekitserver -S &
+
+Verificare servicii:
+
+ps w | grep homekit
+ps w | grep mdns
+netstat -an | grep 5353
+
+
+Nota finala
+-----------
+
+HomeKit este separat de integrarea Aqara M1S Local.
+HomeKit ramane pentru:
+- lumina
+- volum oficial
+- alarm control
+- pairing mode / identify
+
+Integrarea Aqara M1S Local ramane pentru:
+- sunete locale
+- WAV-uri custom
+- play_url
+- diagnostic Telnet/procese/senzori locali

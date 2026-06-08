@@ -1,0 +1,280 @@
+Aqara Hub M1S – Telnet/root persistent sigur
+==================================================
+
+Scop:
+- activare root / Telnet pe Aqara Hub M1S
+- fara flash firmware
+- fara Niceboy
+- fara modificari in rootfs
+- pornire Telnet automata dupa reboot, fara sa blocheze Wi-Fi/HomeKit
+
+Model testat:
+- Aqara Hub M1S
+- model: lumi.gateway.aeu01
+- firmware: 3.1.3_0009 - doar firmware care suporat Xiaomi (mihome)
+
+
+REGULI IMPORTANTE
+-----------------
+
+1. NU modifica /etc/init.d/rcS.
+2. NU modifica /bin/fw_manager.sh.
+3. NU folosi telnetd -l /bin/sh pentru metoda permanenta.
+4. NU crea post_init.sh care NU porneste fw_manager.sh -r.
+5. Daca ceva nu merge, sterge /data/scripts/post_init.sh si reboot.
+6. Ideal, primul test se face cu UART conectat, ca metoda de recovery.
+
+
+PARTEA 1 – Obtii IP si token MiIO
+---------------------------------
+
+Ai nevoie de:
+- IP-ul hubului
+- token MiIO se obtine prin integrarea Xiaomi Gateway 3
+
+Exemplu:
+IP: 192.168.0.44
+Token: 6134744347534874785067434exxxxxx
+
+Pe Windows verifici tokenul:
+
+py -m miio.cli device --ip 192.168.0.44 --token 6134744347534874785067434exxxxxx info
+
+Daca raspunde cu model si firmware, tokenul este bun.
+
+
+PARTEA 2 – Activezi Telnet/root temporar cu python-miio
+-------------------------------------------------------
+
+Pe Windows CMD:
+
+py -m miio.cli device --ip 192.168.0.44 --token 6134744347534874785067434exxxxxx raw_command set_ip_info "{\"ssid\":\"\\\"\\\"\",\"pswd\":\"123123 ; passwd -d admin ; passwd -d root ; telnetd\"}"
+
+Apoi intri:
+
+telnet 192.168.0.44
+
+Login:
+admin
+
+Parola:
+Enter gol
+
+Daca nu intra cu admin, incearca:
+root
+
+Parola:
+Enter gol
+
+
+PARTEA 3 – Alternativa fizica: secventa 5-2-2-2-2-2-2
+-----------------------------------------------------
+
+Daca python-miio nu este disponibil sau Telnet nu porneste, se poate activa Telnet/root fizic cu secventa:
+
+5-2-2-2-2-2-2
+
+Dupa secventa, verifica din Windows:
+
+telnet IP_HUB
+
+Aceasta metoda este temporara. Dupa reboot/power cycle, Telnet poate disparea.
+
+
+PARTEA 4 – Verificari dupa ce ai intrat pe hub
+----------------------------------------------
+
+Pe hub, la prompt #, ruleaza:
+
+ps w | grep telnet
+
+netstat -lnp | grep 23
+
+ls -l /etc/passwd /etc/shadow
+
+Rezultat asteptat:
+- telnetd ruleaza
+- portul 23 asculta pe :::23
+- /etc/passwd -> /data/musics/passwd
+- /etc/shadow -> /data/musics/shadow
+
+
+PARTEA 5 – Verifica daca exista script periculos
+------------------------------------------------
+
+Ruleaza:
+
+ls -l /data/scripts 2>/dev/null
+
+Daca exista /data/scripts/post_init.sh vechi sau gresit, sterge-l:
+
+rm -f /data/scripts/post_init.sh
+sync
+
+Acest pas este important. Un post_init.sh gresit poate opri pornirea normala Wi-Fi/HomeKit.
+
+
+PARTEA 6 – Creezi Telnet persistent corect
+------------------------------------------
+
+Acesta este scriptul final testat.
+
+El:
+- porneste sistemul Aqara normal cu fw_manager.sh -r
+- asteapta pana cand wlan0 are IP
+- apoi activeaza Telnet prin metoda oficiala Aqara: fw_manager.sh -t -k
+
+Pe hub ruleaza exact:
+
+mkdir -p /data/scripts
+
+cat > /data/scripts/post_init.sh <<'EOF'
+#!/bin/sh
+
+fw_manager.sh -r &
+
+(
+    i=0
+    while [ $i -lt 120 ]; do
+        IP="$(ifconfig wlan0 2>/dev/null | grep 'inet addr')"
+        if [ "$IP" != "" ]; then
+            sleep 5
+            fw_manager.sh -t -k &
+            exit 0
+        fi
+        sleep 2
+        i=$((i+2))
+    done
+
+    fw_manager.sh -t -k &
+) &
+
+exit 0
+EOF
+
+chmod +x /data/scripts/post_init.sh
+sync
+
+
+PARTEA 7 – Verifici scriptul inainte de reboot
+----------------------------------------------
+
+Ruleaza:
+
+cat /data/scripts/post_init.sh
+
+Trebuie sa vezi exact:
+
+#!/bin/sh
+
+fw_manager.sh -r &
+
+(
+    i=0
+    while [ $i -lt 120 ]; do
+        IP="$(ifconfig wlan0 2>/dev/null | grep 'inet addr')"
+        if [ "$IP" != "" ]; then
+            sleep 5
+            fw_manager.sh -t -k &
+            exit 0
+        fi
+        sleep 2
+        i=$((i+2))
+    done
+
+    fw_manager.sh -t -k &
+) &
+
+exit 0
+
+Daca vezi in fisier linii precum EOF, chmod, cat >, comenzi duplicate sau text lipit gresit, NU da reboot.
+
+
+PARTEA 8 – Reboot si test
+-------------------------
+
+Ruleaza:
+
+reboot
+
+Dupa reboot:
+1. asteapta sa intre hubul in Wi-Fi
+2. nu apasa secventa 5-2-2-2-2-2-2
+3. testeaza din Windows:
+
+telnet IP_HUB
+
+Daca intra fara secventa fizica, Telnet persistent functioneaza.
+
+
+PARTEA 9 – Verificari finale
+----------------------------
+
+Dupa conectare prin Telnet:
+
+ps w | grep telnet
+
+netstat -lnp | grep 23
+
+Rezultat asteptat:
+
+telnetd ruleaza
+
+si:
+
+tcp 0 0 :::23 :::* LISTEN .../telnetd
+
+
+RECOVERY DACA NU PORNESTE WI-FI
+-------------------------------
+
+Daca hubul nu mai apare in Wi-Fi dupa reboot, intra prin UART/serial si ruleaza:
+
+rm -f /data/scripts/post_init.sh
+sync
+reboot
+
+Asta sterge hook-ul si hubul revine la boot normal.
+
+UART:
+- adaptor USB-TTL 3.3V
+- GND -> GND
+- TX adaptor -> RX hub
+- RX adaptor -> TX hub
+- NU conecta VCC
+- viteza seriala: 38400, 8N1, flow control none
+
+
+NOTE IMPORTANTE
+---------------
+
+- post_init.sh este executat de /etc/init.d/rcS in loc de fw_manager.sh -r.
+- De aceea scriptul nostru trebuie obligatoriu sa porneasca fw_manager.sh -r.
+- fw_manager.sh -t -k este metoda oficiala gasita in firmware pentru user behavior/debug:
+  activeaza UART debug si porneste telnetd.
+- Metoda buna este sa astepti IP pe wlan0, apoi sa pornesti Telnet.
+- Nu folosi telnetd -l /bin/sh ca metoda permanenta.
+- Nu aplica pe multe huburi pana nu testezi pe unul singur cu succes dupa reboot si power cycle.
+
+
+COMENZI SCURTE DE VERIFICARE
+----------------------------
+
+Token MiIO:
+
+py -m miio.cli device --ip IP_HUB --token TOKEN info
+
+Telnet activ:
+
+telnet IP_HUB
+
+Verificare Telnet pe hub:
+
+ps w | grep telnet
+netstat -lnp | grep 23
+
+Stergere script persistent:
+
+rm -f /data/scripts/post_init.sh
+sync
+reboot

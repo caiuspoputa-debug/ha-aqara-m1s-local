@@ -1,0 +1,280 @@
+Aqara Hub M1S – Safe persistent Telnet/root
+==================================================
+
+Purpose:
+- enable root / Telnet on Aqara Hub M1S
+- no firmware flashing
+- no Niceboy
+- no rootfs modifications
+- automatic Telnet start after reboot without breaking Wi-Fi/HomeKit
+
+Tested model:
+- Aqara Hub M1S
+- model: lumi.gateway.aeu01
+- firmware: 3.1.3_0009 - only firmware that supports Xiaomi / Mi Home
+
+
+IMPORTANT RULES
+---------------
+
+1. DO NOT modify /etc/init.d/rcS.
+2. DO NOT modify /bin/fw_manager.sh.
+3. DO NOT use telnetd -l /bin/sh for the permanent method.
+4. DO NOT create a post_init.sh that does not start fw_manager.sh -r.
+5. If something goes wrong, delete /data/scripts/post_init.sh and reboot.
+6. Ideally, do the first test with UART connected as a recovery method.
+
+
+PART 1 – Get IP and MiIO token
+------------------------------
+
+You need:
+- the hub IP
+- the MiIO token obtained through the Xiaomi Gateway 3 integration
+
+Example:
+IP: 192.168.0.44
+Token: 6134744347534874785067434exxxxxx
+
+On Windows, check the token:
+
+py -m miio.cli device --ip 192.168.0.44 --token 6134744347534874785067434exxxxxx info
+
+If it returns model and firmware, the token is valid.
+
+
+PART 2 – Temporarily enable Telnet/root with python-miio
+--------------------------------------------------------
+
+On Windows CMD:
+
+py -m miio.cli device --ip 192.168.0.44 --token 6134744347534874785067434exxxxxx raw_command set_ip_info "{\"ssid\":\"\\\"\\\"\",\"pswd\":\"123123 ; passwd -d admin ; passwd -d root ; telnetd\"}"
+
+Then enter:
+
+telnet 192.168.0.44
+
+Login:
+admin
+
+Password:
+empty Enter
+
+If admin does not work, try:
+root
+
+Password:
+empty Enter
+
+
+PART 3 – Physical alternative: 5-2-2-2-2-2-2 sequence
+-----------------------------------------------------
+
+If python-miio is not available or Telnet does not start, Telnet/root can be enabled physically with the sequence:
+
+5-2-2-2-2-2-2
+
+After the sequence, check from Windows:
+
+telnet HUB_IP
+
+This method is temporary. After reboot/power cycle, Telnet may disappear.
+
+
+PART 4 – Checks after entering the hub
+--------------------------------------
+
+On the hub, at the # prompt, run:
+
+ps w | grep telnet
+
+netstat -lnp | grep 23
+
+ls -l /etc/passwd /etc/shadow
+
+Expected result:
+- telnetd is running
+- port 23 listens on :::23
+- /etc/passwd -> /data/musics/passwd
+- /etc/shadow -> /data/musics/shadow
+
+
+PART 5 – Check for dangerous old script
+---------------------------------------
+
+Run:
+
+ls -l /data/scripts 2>/dev/null
+
+If an old or wrong /data/scripts/post_init.sh exists, delete it:
+
+rm -f /data/scripts/post_init.sh
+sync
+
+This step is important. A wrong post_init.sh can stop normal Wi-Fi/HomeKit startup.
+
+
+PART 6 – Create correct persistent Telnet
+-----------------------------------------
+
+This is the final tested script.
+
+It:
+- starts the Aqara system normally with fw_manager.sh -r
+- waits until wlan0 has an IP
+- then enables Telnet through the official Aqara method: fw_manager.sh -t -k
+
+Run exactly on the hub:
+
+mkdir -p /data/scripts
+
+cat > /data/scripts/post_init.sh <<'EOF'
+#!/bin/sh
+
+fw_manager.sh -r &
+
+(
+    i=0
+    while [ $i -lt 120 ]; do
+        IP="$(ifconfig wlan0 2>/dev/null | grep 'inet addr')"
+        if [ "$IP" != "" ]; then
+            sleep 5
+            fw_manager.sh -t -k &
+            exit 0
+        fi
+        sleep 2
+        i=$((i+2))
+    done
+
+    fw_manager.sh -t -k &
+) &
+
+exit 0
+EOF
+
+chmod +x /data/scripts/post_init.sh
+sync
+
+
+PART 7 – Verify the script before reboot
+----------------------------------------
+
+Run:
+
+cat /data/scripts/post_init.sh
+
+You must see exactly:
+
+#!/bin/sh
+
+fw_manager.sh -r &
+
+(
+    i=0
+    while [ $i -lt 120 ]; do
+        IP="$(ifconfig wlan0 2>/dev/null | grep 'inet addr')"
+        if [ "$IP" != "" ]; then
+            sleep 5
+            fw_manager.sh -t -k &
+            exit 0
+        fi
+        sleep 2
+        i=$((i+2))
+    done
+
+    fw_manager.sh -t -k &
+) &
+
+exit 0
+
+If the file contains lines such as EOF, chmod, cat >, duplicated commands, or wrongly pasted text, DO NOT reboot.
+
+
+PART 8 – Reboot and test
+------------------------
+
+Run:
+
+reboot
+
+After reboot:
+1. wait until the hub joins Wi-Fi
+2. do not press the 5-2-2-2-2-2-2 sequence
+3. test from Windows:
+
+telnet HUB_IP
+
+If it enters without the physical sequence, persistent Telnet works.
+
+
+PART 9 – Final checks
+---------------------
+
+After connecting through Telnet:
+
+ps w | grep telnet
+
+netstat -lnp | grep 23
+
+Expected result:
+
+telnetd is running
+
+and:
+
+tcp 0 0 :::23 :::* LISTEN .../telnetd
+
+
+RECOVERY IF WI-FI DOES NOT START
+--------------------------------
+
+If the hub no longer appears on Wi-Fi after reboot, enter through UART/serial and run:
+
+rm -f /data/scripts/post_init.sh
+sync
+reboot
+
+This removes the hook and the hub returns to normal boot.
+
+UART:
+- USB-TTL adapter 3.3V
+- GND -> GND
+- adapter TX -> hub RX
+- adapter RX -> hub TX
+- DO NOT connect VCC
+- serial speed: 38400, 8N1, flow control none
+
+
+IMPORTANT NOTES
+---------------
+
+- post_init.sh is executed by /etc/init.d/rcS instead of fw_manager.sh -r.
+- Therefore our script must always start fw_manager.sh -r.
+- fw_manager.sh -t -k is the official method found in the firmware for user behavior/debug:
+  it enables UART debug and starts telnetd.
+- The good method is to wait for an IP on wlan0, then start Telnet.
+- Do not use telnetd -l /bin/sh as a permanent method.
+- Do not apply to many hubs until you test one successfully after reboot and power cycle.
+
+
+SHORT CHECK COMMANDS
+--------------------
+
+MiIO token:
+
+py -m miio.cli device --ip HUB_IP --token TOKEN info
+
+Telnet active:
+
+telnet HUB_IP
+
+Check Telnet on the hub:
+
+ps w | grep telnet
+netstat -lnp | grep 23
+
+Delete persistent script:
+
+rm -f /data/scripts/post_init.sh
+sync
+reboot

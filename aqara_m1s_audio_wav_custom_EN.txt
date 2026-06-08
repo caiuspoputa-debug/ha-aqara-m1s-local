@@ -1,0 +1,212 @@
+Aqara M1S - Custom WAV audio, arm_ok.wav and local playback
+================================================================
+
+Purpose:
+- convert MP3/WAV into a format accepted by Aqara M1S
+- test sound directly on the hub
+- replace the internal arm_ok.wav sound
+- avoid the issue where aplay plays the sound 3 times
+- control volume correctly through the WAV file, not through HomeKit
+
+
+============================================================
+1. Accepted WAV format
+============================================================
+
+Recommended format for Aqara M1S:
+
+mono
+32000 Hz
+PCM S32_LE
+
+Example final file:
+
+arm_ok.wav
+
+
+============================================================
+2. Conversion with ffmpeg
+============================================================
+
+Convert from an MP3/WAV source into Aqara M1S format:
+
+ffmpeg -y -i input.mp3 -ac 1 -ar 32000 -filter:a "volume=0.70" -c:a pcm_s32le arm_ok.wav
+
+Explanation:
+- -ac 1 = mono
+- -ar 32000 = 32 kHz
+- volume=0.70 = volume reduced to 70%
+- pcm_s32le = PCM 32-bit little-endian, accepted by M1S
+
+For quieter audio:
+
+volume=0.56
+
+For louder audio:
+
+volume=0.80
+
+
+============================================================
+3. HA location for hub download
+============================================================
+
+Place the file in Home Assistant:
+
+/config/www/arm_ok.wav
+
+The URL becomes:
+
+http://HOME_ASSISTANT_IP:8123/local/arm_ok.wav
+
+Example:
+
+http://192.168.0.20:8123/local/arm_ok.wav
+
+
+============================================================
+4. Download to hub for testing
+============================================================
+
+In Telnet on the hub:
+
+cd /tmp
+rm -f arm_ok_new.wav
+wget http://192.168.0.20:8123/local/arm_ok.wav -O arm_ok_new.wav
+ls -l arm_ok_new.wav
+
+
+============================================================
+5. Test playback only once
+============================================================
+
+IMPORTANT:
+On this firmware, the simple command:
+
+aplay arm_ok_new.wav
+
+may play the sound 3 times.
+
+The correct command for one playback is:
+
+aplay -x 1 /tmp/arm_ok_new.wav
+
+
+============================================================
+6. Backup original sound
+============================================================
+
+The internal arm_ok.wav sound is here:
+
+/data/musics/music-scene/arm_ok.wav
+
+Make a backup once:
+
+cd /data/musics/music-scene
+[ -f arm_ok.wav.bak ] || cp arm_ok.wav arm_ok.wav.bak
+sync
+
+
+============================================================
+7. Replace arm_ok.wav permanently
+============================================================
+
+After the /tmp test sounds correct:
+
+cp /tmp/arm_ok_new.wav /data/musics/music-scene/arm_ok.wav
+chmod 775 /data/musics/music-scene/arm_ok.wav
+sync
+
+Final test:
+
+aplay -x 1 /data/musics/music-scene/arm_ok.wav
+
+
+============================================================
+8. Restore original arm_ok.wav
+============================================================
+
+To restore the original sound:
+
+cd /data/musics/music-scene
+cp arm_ok.wav.bak arm_ok.wav
+chmod 775 arm_ok.wav
+sync
+aplay -x 1 arm_ok.wav
+
+
+============================================================
+9. Internal sound list
+============================================================
+
+Find internal WAV files:
+
+find /data/musics -type f -name "*.wav" 2>/dev/null
+
+Important locations:
+
+/data/musics/music-scene/
+/data/musics/music-us/
+/data/musics/music-ch/
+
+Useful examples:
+
+/data/musics/music-scene/arm_ok.wav
+/data/musics/music-scene/arm_start.wav
+/data/musics/music-scene/disarm.wav
+/data/musics/music-scene/door_bell_1.wav
+/data/musics/music-scene/alarm.wav
+
+
+============================================================
+10. Volume
+============================================================
+
+Important discovery:
+
+HomeKit / Aqara volume:
+
+number.aqarahublight_volume
+number.aqara_hub_m1s_2653_volume
+
+and the property:
+
+persist.sys.volume
+
+do NOT control the volume for direct playback with:
+
+aplay -x 1
+
+Therefore, for directly played local sounds, the volume must be reduced inside the WAV file.
+
+Correct solution:
+- make the WAV quieter during conversion
+- use volume=0.70, 0.56, etc.
+- do not rely on number.volume for aplay
+
+
+============================================================
+11. Quick commands
+============================================================
+
+Download:
+
+wget http://192.168.0.20:8123/local/arm_ok.wav -O /tmp/arm_ok_new.wav
+
+Test once:
+
+aplay -x 1 /tmp/arm_ok_new.wav
+
+Backup:
+
+[ -f /data/musics/music-scene/arm_ok.wav.bak ] || cp /data/musics/music-scene/arm_ok.wav /data/musics/music-scene/arm_ok.wav.bak
+
+Replace:
+
+cp /tmp/arm_ok_new.wav /data/musics/music-scene/arm_ok.wav
+chmod 775 /data/musics/music-scene/arm_ok.wav
+sync
+
+Final test:
+
+aplay -x 1 /data/musics/music-scene/arm_ok.wav

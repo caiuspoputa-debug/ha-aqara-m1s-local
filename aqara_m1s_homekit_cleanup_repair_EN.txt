@@ -1,0 +1,228 @@
+Aqara Hub M1S – HomeKit pairing cleanup and reconnect
+=================================================================
+
+Purpose:
+- remove old HomeKit pairing
+- keep Wi-Fi / MiIO / Aqara as intact as possible
+- restart the HomeKit server
+- make the hub appear again in Home Assistant as a HomeKit Device
+
+WARNING
+-------
+Do not clear every property that contains true.
+Do not delete the whole /data/storage directory.
+Do not touch /etc/init.d/rcS, /bin/fw_manager.sh, or the boot process.
+We only work with the HomeKit part: hap_provisioned, hap_keepalive, user_paired, and the /data/storage/hap folder.
+
+
+1. Check current status
+-----------------------
+
+Run on the hub:
+
+ps w | grep homekit
+ps w | grep mdns
+netstat -an | grep 5353
+getprop sys.hap_disable
+getprop persist.sys.hap_code
+getprop persist.app.hap_provisioned
+getprop persist.app.hap_keepalive
+getprop persist.app.user_paired
+
+Write down the pairing code:
+
+getprop persist.sys.hap_code
+
+Example:
+629-02-623
+
+
+2. Backup before changes
+------------------------
+
+Run:
+
+cp /data/storage/prop.dat /data/storage/prop.dat.bak_homekit
+cp -a /data/storage/hap /data/storage/hap.bak_homekit 2>/dev/null
+sync
+
+Verify:
+
+ls -l /data/storage/prop.dat.bak_homekit
+ls -l /data/storage/hap.bak_homekit 2>/dev/null
+
+
+3. Clean HomeKit pairing
+------------------------
+
+Run:
+
+setprop persist.app.hap_provisioned false
+setprop persist.app.hap_keepalive false
+setprop persist.app.user_paired false
+setprop sys.hap_disable false
+sync
+
+Then move the old HomeKit pairing folder:
+
+mv /data/storage/hap /data/storage/hap.old 2>/dev/null
+mkdir -p /data/storage/hap
+sync
+
+
+4. Restart mDNS and HomeKit server
+----------------------------------
+
+Run:
+
+killall homekitserver 2>/dev/null
+killall mdnsd 2>/dev/null
+mdnsd
+homekitserver -S &
+sleep 10
+
+
+5. Check after restart
+----------------------
+
+Run:
+
+ps w | grep homekit
+ps w | grep mdns
+netstat -an | grep 5353
+getprop sys.hap_disable
+getprop persist.sys.hap_code
+getprop persist.app.hap_provisioned
+getprop persist.app.hap_keepalive
+getprop persist.app.user_paired
+
+You should see:
+- homekitserver -S is running
+- mdnsd is running
+- UDP 5353 exists
+- sys.hap_disable is not true
+- the HomeKit code exists
+
+
+6. Add to Home Assistant
+------------------------
+
+In Home Assistant:
+
+Settings -> Devices & Services -> Add Integration -> HomeKit Device
+
+If the hub appears, select it and enter the code:
+
+with hyphens:
+629-02-623
+
+or, if HA asks without hyphens:
+62902623
+
+
+7. If it does not appear in HA
+------------------------------
+
+Check mDNS:
+
+ps w | grep mdns
+netstat -an | grep 5353
+
+If mdnsd is missing:
+
+mdnsd
+
+Restart HomeKit:
+
+killall homekitserver 2>/dev/null
+homekitserver -S &
+
+Wait 30 seconds and search again in HA.
+
+
+8. If the hub says it is already paired
+---------------------------------------
+
+Check:
+
+getprop persist.app.hap_provisioned
+getprop persist.app.user_paired
+
+If they are true, repeat steps 3 and 4.
+
+If it still does not appear, reboot:
+
+reboot
+
+After reboot, wait for Wi-Fi and Telnet, then search again for HomeKit Device in HA.
+
+
+9. Recovery / restore from backup
+---------------------------------
+
+If something goes wrong, restore the backup:
+
+killall homekitserver 2>/dev/null
+rm -rf /data/storage/hap
+mv /data/storage/hap.old /data/storage/hap 2>/dev/null
+cp /data/storage/prop.dat.bak_homekit /data/storage/prop.dat
+sync
+reboot
+
+If you only have hap.bak_homekit:
+
+killall homekitserver 2>/dev/null
+rm -rf /data/storage/hap
+cp -a /data/storage/hap.bak_homekit /data/storage/hap
+cp /data/storage/prop.dat.bak_homekit /data/storage/prop.dat
+sync
+reboot
+
+
+10. Short commands
+------------------
+
+Read pairing code:
+
+getprop persist.sys.hap_code
+
+Search pairing code in prop.dat:
+
+strings /data/storage/prop.dat | grep -i hap
+
+Quick HomeKit pairing cleanup:
+
+setprop persist.app.hap_provisioned false
+setprop persist.app.hap_keepalive false
+setprop persist.app.user_paired false
+setprop sys.hap_disable false
+mv /data/storage/hap /data/storage/hap.old 2>/dev/null
+mkdir -p /data/storage/hap
+sync
+killall homekitserver 2>/dev/null
+killall mdnsd 2>/dev/null
+mdnsd
+homekitserver -S &
+
+Service check:
+
+ps w | grep homekit
+ps w | grep mdns
+netstat -an | grep 5353
+
+
+Final note
+----------
+
+HomeKit is separate from the Aqara M1S Local integration.
+HomeKit remains for:
+- light
+- official volume
+- alarm control
+- pairing mode / identify
+
+The Aqara M1S Local integration remains for:
+- local sounds
+- custom WAV files
+- play_url
+- Telnet/process/local sensor diagnostics

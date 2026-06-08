@@ -1,0 +1,247 @@
+Aqara M1S - Arhitectura finala HomeKit + local + automatizari
+================================================================
+
+Scop:
+- sa fie clar ce face HomeKit
+- ce face integrarea locala Aqara M1S
+- ce NU trebuie controlat prin integrarea locala
+- ce am descoperit despre volum, sunet, lumina si Zigbee
+
+
+============================================================
+1. Arhitectura stabila recomandata
+============================================================
+
+HomeKit ramane pentru:
+- lumina hubului
+- culoare RGB
+- brightness
+- volum oficial
+- alarm_control_panel
+- pairing / identify
+
+Integrarea locala Aqara M1S ramane pentru:
+- redare WAV local
+- play_url
+- butoane pentru sunetele interne
+- diagnostic Telnet
+- diagnostic procese
+- temperatura locala
+- uptime
+- IP Wi-Fi
+
+Nu amesteca totul intr-o singura integrare daca HomeKit merge stabil.
+
+
+============================================================
+2. Entitati HomeKit importante
+============================================================
+
+Hub aqarahublight:
+
+number.aqarahublight_volume
+alarm_control_panel.aqarahublight_security_system
+light.aqarahublight_lightbulb
+
+Hub aqara_hub_m1s_2653:
+
+number.aqara_hub_m1s_2653_volume
+alarm_control_panel.aqara_hub_m1s_2653_security_system
+light.aqara_hub_m1s_2653_lightbulb
+
+
+============================================================
+3. Volum zi/noapte in automatizari
+============================================================
+
+Exemplu pentru volum 20 noaptea si 60 ziua:
+
+value: >-
+  {% if now().hour >= 21 or now().hour < 9 %} 20 {% else %} 60
+  {% endif %}
+
+Exemplu pentru volum 5 noaptea si 25 ziua:
+
+value: >-
+  {% if now().hour >= 21 or now().hour < 8 %} 5 {% else %} 25
+  {% endif %}
+
+
+============================================================
+4. Diferenta intre trigger, action si entity
+============================================================
+
+Trigger:
+- porneste automatizarea
+
+Exemplu:
+
+triggers:
+  - entity_id: binary_sensor.senzor_de_contact_1_water_leak
+    from: "off"
+    to: "on"
+    trigger: state
+
+Actiuni:
+- ce face automatizarea dupa trigger
+- seteaza volum
+- porneste alarma
+- aprinde lumina
+- opreste alarma
+- restaureaza scena
+
+Entitati:
+- toate device-urile/obiectele folosite in trigger sau actions
+
+
+============================================================
+5. Lumina rosu/verde
+============================================================
+
+O secventa simpla rosu -> verde:
+
+- continue_on_error: true
+  target:
+    entity_id: light.aqarahublight_lightbulb
+  data:
+    brightness_pct: 100
+    rgb_color:
+      - 255
+      - 0
+      - 0
+  action: light.turn_on
+
+- delay: "00:00:01"
+
+- continue_on_error: true
+  target:
+    entity_id: light.aqarahublight_lightbulb
+  data:
+    brightness_pct: 100
+    rgb_color:
+      - 0
+      - 255
+      - 0
+  action: light.turn_on
+
+Pentru repetare:
+
+repeat:
+  count: 4
+  sequence:
+    ...
+
+
+============================================================
+6. Snapshot pentru lumini
+============================================================
+
+Daca vrei sa revii la starea initiala a luminii, creezi scena snapshot:
+
+- data:
+    scene_id: snapshot_bec
+    snapshot_entities:
+      - light.aqarahublight_lightbulb
+  action: scene.create
+
+La final:
+
+- continue_on_error: true
+  target:
+    entity_id: scene.snapshot_bec
+  action: scene.turn_on
+
+Pentru doua huburi:
+
+snapshot_entities:
+  - light.aqarahublight_lightbulb
+  - light.aqara_hub_m1s_2653_lightbulb
+
+
+============================================================
+7. Sunet prin alarm_control_panel
+============================================================
+
+Sunetul oficial Aqara/HomeKit merge prin:
+
+alarm_control_panel.aqarahublight_security_system
+
+Actiuni utile:
+
+alarm_control_panel.alarm_trigger
+alarm_control_panel.alarm_arm_night
+alarm_control_panel.alarm_arm_away
+alarm_control_panel.alarm_disarm
+
+Pentru sonerie simpla:
+
+- setezi volumul
+- pornesti alarma / armare
+- delay
+- opresti volumul sau dezarmezi
+
+
+============================================================
+8. Ce NU trebuie facut
+============================================================
+
+Nu scoate blocuri de volum daca exista logica zi/noapte.
+Nu schimba senzorii trigger fara cerere explicita.
+Nu schimba entitatile intre huburi fara cerere explicita.
+Nu sterge scene snapshot daca erau in codul original.
+Nu transforma automatizari dual hub in single hub decat daca asta se cere.
+
+
+============================================================
+9. Zigbee Aqara
+============================================================
+
+Daca hubul nu are device-uri Zigbee legate si vrei sa reduci zgomotul langa Zigbee2MQTT, poti opri:
+
+mzigbee_agent
+app_monitor.sh
+
+Dupa oprire, verificarea corecta este:
+
+ps w | grep mzigbee
+ps w | grep app_monitor
+
+Daca apare doar grep, Zigbee Aqara este oprit.
+
+Nu opri:
+homekitserver
+mha_basis
+mha_master
+miio_client
+
+
+============================================================
+10. Procese importante
+============================================================
+
+Verificare:
+
+ps w | grep telnet
+ps w | grep mzigbee
+ps w | grep app_monitor
+ps w | grep homekit
+ps w | grep mha
+ps w | grep miio
+
+Rezultat dorit pentru hub fara Zigbee Aqara:
+
+telnetd = prezent
+mzigbee_agent = absent
+app_monitor.sh = absent
+homekitserver -S = prezent
+mha_basis = prezent
+mha_master -b = prezent
+miio_client = prezent
+
+
+============================================================
+11. Lux
+============================================================
+
+Sursa locala pentru lux nu a fost gasita sigur.
+Nu expune lux in integrarea locala pana nu exista sursa reala verificata.

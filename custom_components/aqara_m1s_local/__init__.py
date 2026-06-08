@@ -27,7 +27,7 @@ PLATFORMS = [button.DOMAIN, sensor.DOMAIN, select.DOMAIN, number.DOMAIN]
 def build_play_command(path: str, volume: int | float | None = None) -> str:
     vol = int(volume if volume is not None else 20)
     vol = max(0, min(100, vol))
-    return f'setprop persist.sys.volume {vol}; aplay "{path}"'
+    return f'setprop persist.sys.volume {vol}; aplay -x 1 "{path}"'
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -80,7 +80,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         client = await _get_client(call)
         url = call.data["url"]
         vol = max(0, min(100, _volume(call)))
-        cmd = f'setprop persist.sys.volume {vol}; wget -q "{url}" -O /tmp/ha_audio.wav && aplay /tmp/ha_audio.wav'
+        cmd = f'setprop persist.sys.volume {vol}; wget -q "{url}" -O /tmp/ha_audio.wav && aplay -x 1 /tmp/ha_audio.wav'
         await hass.async_add_executor_job(client.run_command, cmd)
 
     async def play_sound(call: ServiceCall) -> None:

@@ -18,7 +18,6 @@ class AqaraM1SClient:
     timeout: float = 8.0
 
     def _negotiate(self, data: bytes) -> bytes:
-        """Remove telnet negotiation bytes. Negotiation replies are handled in run_command."""
         out = bytearray()
         i = 0
         while i < len(data):
@@ -102,19 +101,8 @@ class AqaraM1SClient:
         except Exception:
             return False
 
-    def getprop(self, name: str) -> str | None:
-        try:
-            out = self.run_command(f"getprop {name}")
-            lines = [l.strip() for l in out.splitlines() if l.strip()]
-            for line in lines:
-                if line and not line.startswith(("echo ", "__M1S_DONE__", "#", "getprop")):
-                    return line
-        except Exception:
-            return None
-        return None
-
     def list_sounds(self) -> list[str]:
-        out = self.run_command("find /data/musics -type f -name \"*.wav\" 2>/dev/null")
+        out = self.run_command('find /data/musics -type f -name "*.wav" 2>/dev/null')
         sounds = []
         for line in out.splitlines():
             line = line.strip()

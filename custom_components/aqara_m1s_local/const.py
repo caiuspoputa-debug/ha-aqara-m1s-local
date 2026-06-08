@@ -16,3 +16,4 @@ SERVICE_RUN_COMMAND = "run_command"
 
 DATA_CLIENTS = "clients"
 DATA_SELECTED_SOUND = "selected_sound"
+DATA_SOUND_MAP = "sound_map"

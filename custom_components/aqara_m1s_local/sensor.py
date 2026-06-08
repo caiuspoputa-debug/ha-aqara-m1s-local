@@ -78,7 +78,7 @@ class AqaraM1SSensor(SensorEntity):
         try:
             output = await self.hass.async_add_executor_job(self.client.run_command, self.sensor.command)
             self._attr_native_value = self.sensor.parser(output)
-        except Exception as exc:
+        except Exception:
             self._attr_native_value = None
             self._attr_available = False
             return

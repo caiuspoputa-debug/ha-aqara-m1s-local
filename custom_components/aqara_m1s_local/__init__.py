@@ -17,6 +17,7 @@ from .const import (
     SERVICE_RUN_COMMAND,
     DATA_CLIENTS,
     DATA_SELECTED_SOUND,
+    DATA_SOUND_MAP,
 )
 from .client import AqaraM1SClient
 
@@ -36,8 +37,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN].setdefault(DATA_CLIENTS, {})
     hass.data[DOMAIN].setdefault(DATA_SELECTED_SOUND, {})
+    hass.data[DOMAIN].setdefault(DATA_SOUND_MAP, {})
     hass.data[DOMAIN][DATA_CLIENTS][entry.entry_id] = client
     hass.data[DOMAIN][DATA_SELECTED_SOUND][entry.entry_id] = "/data/musics/music-scene/door_bell_1.wav"
+    hass.data[DOMAIN][DATA_SOUND_MAP][entry.entry_id] = {}
 
     device_registry = dr.async_get(hass)
     device_registry.async_get_or_create(
@@ -93,4 +96,5 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unloaded:
         hass.data[DOMAIN][DATA_CLIENTS].pop(entry.entry_id, None)
         hass.data[DOMAIN][DATA_SELECTED_SOUND].pop(entry.entry_id, None)
+        hass.data[DOMAIN][DATA_SOUND_MAP].pop(entry.entry_id, None)
     return unloaded

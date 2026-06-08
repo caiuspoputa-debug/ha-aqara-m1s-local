@@ -1,0 +1,21 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Aqara M1S Local",
+        "description": "Connect to an Aqara M1S hub through the no-login telnet shell.",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "name": "Name"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect"
+    },
+    "abort": {
+      "already_configured": "This hub is already configured"
+    }
+  }
+}

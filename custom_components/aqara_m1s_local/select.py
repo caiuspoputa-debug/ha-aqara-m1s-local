@@ -20,8 +20,7 @@ FALLBACK_SOUNDS = [
 
 def label_for_path(path: str) -> str:
     p = PurePosixPath(path)
-    parent = p.parent.name
-    return f"{parent} / {p.name}"
+    return f"{p.parent.name} / {p.name}"
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback):

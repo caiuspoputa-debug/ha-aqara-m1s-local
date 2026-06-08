@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.const import CONF_HOST, CONF_PORT, CONF_USERNAME, CONF_PASSWORD
 from homeassistant.helpers import device_registry as dr
-from homeassistant.components import button, sensor, select
+from homeassistant.components import button, sensor, select, number
 
 from .const import (
     DOMAIN,
@@ -18,12 +17,17 @@ from .const import (
     DATA_CLIENTS,
     DATA_SELECTED_SOUND,
     DATA_SOUND_MAP,
+    DATA_PLAYBACK_VOLUME,
 )
 from .client import AqaraM1SClient
 
-_LOGGER = logging.getLogger(__name__)
+PLATFORMS = [button.DOMAIN, sensor.DOMAIN, select.DOMAIN, number.DOMAIN]
 
-PLATFORMS = [button.DOMAIN, sensor.DOMAIN, select.DOMAIN]
+
+def build_play_command(path: str, volume: int | float | None = None) -> str:
+    vol = int(volume if volume is not None else 20)
+    vol = max(0, min(100, vol))
+    return f'setprop persist.sys.volume {vol}; aplay "{path}"'
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -38,9 +42,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN].setdefault(DATA_CLIENTS, {})
     hass.data[DOMAIN].setdefault(DATA_SELECTED_SOUND, {})
     hass.data[DOMAIN].setdefault(DATA_SOUND_MAP, {})
+    hass.data[DOMAIN].setdefault(DATA_PLAYBACK_VOLUME, {})
     hass.data[DOMAIN][DATA_CLIENTS][entry.entry_id] = client
     hass.data[DOMAIN][DATA_SELECTED_SOUND][entry.entry_id] = "/data/musics/music-scene/door_bell_1.wav"
     hass.data[DOMAIN][DATA_SOUND_MAP][entry.entry_id] = {}
+    hass.data[DOMAIN][DATA_PLAYBACK_VOLUME][entry.entry_id] = 20
 
     device_registry = dr.async_get(hass)
     device_registry.async_get_or_create(
@@ -67,16 +73,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             )
         return hass.data[DOMAIN][DATA_CLIENTS][entry.entry_id]
 
+    def _volume(call: ServiceCall) -> int:
+        return int(call.data.get("volume", hass.data[DOMAIN][DATA_PLAYBACK_VOLUME].get(entry.entry_id, 20)))
+
     async def play_url(call: ServiceCall) -> None:
         client = await _get_client(call)
         url = call.data["url"]
-        cmd = f'wget -q "{url}" -O /tmp/ha_audio.wav && aplay /tmp/ha_audio.wav'
+        vol = max(0, min(100, _volume(call)))
+        cmd = f'setprop persist.sys.volume {vol}; wget -q "{url}" -O /tmp/ha_audio.wav && aplay /tmp/ha_audio.wav'
         await hass.async_add_executor_job(client.run_command, cmd)
 
     async def play_sound(call: ServiceCall) -> None:
         client = await _get_client(call)
         path = call.data["path"]
-        cmd = f'aplay "{path}"'
+        cmd = build_play_command(path, _volume(call))
         await hass.async_add_executor_job(client.run_command, cmd)
 
     async def run_command(call: ServiceCall) -> None:
@@ -97,4 +107,5 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data[DOMAIN][DATA_CLIENTS].pop(entry.entry_id, None)
         hass.data[DOMAIN][DATA_SELECTED_SOUND].pop(entry.entry_id, None)
         hass.data[DOMAIN][DATA_SOUND_MAP].pop(entry.entry_id, None)
+        hass.data[DOMAIN][DATA_PLAYBACK_VOLUME].pop(entry.entry_id, None)
     return unloaded

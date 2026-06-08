@@ -17,7 +17,6 @@ class AqaraM1SLocalConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             await self.async_set_unique_id(user_input[CONF_HOST])
             self._abort_if_unique_id_configured()
-
             return self.async_create_entry(
                 title=user_input.get("name") or f"Aqara M1S {user_input[CONF_HOST]}",
                 data=user_input,

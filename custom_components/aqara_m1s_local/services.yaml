@@ -20,6 +20,14 @@ play_url:
       required: true
       selector:
         text:
+    volume:
+      name: Volume
+      required: false
+      default: 20
+      selector:
+        number:
+          min: 0
+          max: 100
 
 play_sound:
   name: Play Sound
@@ -43,6 +51,14 @@ play_sound:
       required: true
       selector:
         text:
+    volume:
+      name: Volume
+      required: false
+      default: 20
+      selector:
+        number:
+          min: 0
+          max: 100
 
 run_command:
   name: Run Command

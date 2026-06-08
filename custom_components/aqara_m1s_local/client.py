@@ -94,13 +94,6 @@ class AqaraM1SClient:
 
         return output
 
-    def test(self) -> bool:
-        try:
-            out = self.run_command("echo ok")
-            return "ok" in out
-        except Exception:
-            return False
-
     def list_sounds(self) -> list[str]:
         out = self.run_command('find /data/musics -type f -name "*.wav" 2>/dev/null')
         sounds = []

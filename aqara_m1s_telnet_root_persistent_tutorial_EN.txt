@@ -1,152 +1,399 @@
-Aqara Hub M1S – Safe persistent Telnet/root
-==================================================
+# Aqara Hub M1S – Telnet persistent, Zigbee PA 0 și tunel MQTT permanent
 
-Purpose:
-- enable root / Telnet on Aqara Hub M1S
-- no firmware flashing
-- no Niceboy
-- no rootfs modifications
-- automatic Telnet start after reboot without breaking Wi-Fi/HomeKit
+## 1. Scop
 
-Tested model:
-- Aqara Hub M1S
-- model: lumi.gateway.aeu01
-- firmware: 3.1.3_0009 - only firmware that supports Xiaomi / Mi Home
+Această procedură configurează un Aqara Hub M1S astfel încât, după fiecare reboot:
 
+- firmware-ul original Aqara să pornească normal;
+- Wi-Fi, HomeKit și serviciile locale să rămână funcționale;
+- Telnet/root să fie activat automat;
+- parametrul Zigbee Power Amplifier să fie setat automat la `0`;
+- brokerul MQTT intern de pe `127.0.0.1:1883` să fie accesibil în LAN prin portul `1884`;
+- tunelul MQTT să se refacă automat după deconectarea clientului;
+- funcțiile locale importante, inclusiv lumina, sunetul și senzorul de iluminare, să rămână active.
 
-IMPORTANT RULES
----------------
+Nu este necesar firmware modificat și nu se scrie nimic în rootfs.
 
-1. DO NOT modify /etc/init.d/rcS.
-2. DO NOT modify /bin/fw_manager.sh.
-3. DO NOT use telnetd -l /bin/sh for the permanent method.
-4. DO NOT create a post_init.sh that does not start fw_manager.sh -r.
-5. If something goes wrong, delete /data/scripts/post_init.sh and reboot.
-6. Ideally, do the first test with UART connected as a recovery method.
+---
 
+## 2. Configurație testată
 
-PART 1 – Get IP and MiIO token
-------------------------------
+- Dispozitiv: Aqara Hub M1S
+- Model: `lumi.gateway.aeu01`
+- Firmware: `3.1.3_0009`
+- Kernel: Linux 3.10.90, MIPS
+- Cip Zigbee: NXP JN5189
+- Interfață Zigbee: `/dev/ttyS1`
+- Broker MQTT intern: `127.0.0.1:1883`
+- Port MQTT expus în LAN: `1884`
+- Serviciu Zigbee: `mzigbee_agent`
+- Monitor servicii: `app_monitor.sh`
 
-You need:
-- the hub IP
-- the MiIO token obtained through the Xiaomi Gateway 3 integration
+---
 
-Example:
-IP: 192.168.0.44
+## 3. Avertismente importante
+
+1. Nu modifica `/etc/init.d/rcS`.
+2. Nu modifica `/bin/fw_manager.sh`.
+3. Nu folosi `telnetd -l /bin/sh` ca metodă permanentă.
+4. Scriptul `/data/scripts/post_init.sh` trebuie să pornească obligatoriu:
+   ```sh
+   fw_manager.sh -r &
+   ```
+5. Nu opri:
+   - `mha_basis`
+   - `mha_master`
+   - `homekitserver`
+   - `miio_client`
+   - `mzigbee_agent`
+   - `app_monitor.sh`
+6. Nu expune portul `1884` pe Internet.
+7. Telnet și MQTT sunt necriptate și trebuie folosite doar într-o rețea locală de încredere.
+8. Ideal, primul test se face cu acces UART disponibil pentru recuperare.
+
+---
+
+## 4. De ce nu mai oprim `mzigbee_agent`
+
+Metoda veche oprea:
+
+```sh
+killall app_monitor.sh
+killall mzigbee_agent
+```
+
+Aceasta nu mai este recomandată.
+
+Motivul: `mzigbee_agent` nu gestionează doar radio-ul Zigbee. Din testele făcute, el participă și la funcții locale ale hubului, inclusiv:
+
+- controlul LED-ului;
+- raportarea senzorului intern de iluminare;
+- comunicația internă MQTT;
+- alte funcții legate de hub.
+
+Oprirea completă a procesului poate duce la pierderea controlului luminii și a altor funcții locale.
+
+Metoda nouă păstrează serviciile active și execută doar:
+
+```sh
+zigbee_msnger set_pa 0
+```
+
+Aceasta setează parametrul Power Amplifier la `0`, fără să oprească întregul serviciu Zigbee.
+
+Important: `zigbee_pa:0` nu dovedește că întregul radio JN5189 este complet oprit. Confirmă doar că parametrul PA este `0`, ceea ce dezactivează sau reduce amplificatorul RF extern.
+
+---
+
+# PARTEA A – Activarea inițială Telnet/root
+
+## 5. Obținerea IP-ului și tokenului MiIO
+
+Ai nevoie de:
+
+- IP-ul hubului;
+- tokenul MiIO.
+
+Exemplu:
+
+```text
+IP: 192.168.0.100
 Token: 6134744347534874785067434exxxxxx
+```
 
-On Windows, check the token:
+În Windows PowerShell:
 
-py -m miio.cli device --ip 192.168.0.44 --token 6134744347534874785067434exxxxxx info
+```powershell
+python -m miio.cli device --ip 192.168.0.100 --token TOKEN info
+```
 
-If it returns model and firmware, the token is valid.
+Dacă sunt afișate modelul și versiunea firmware, tokenul este valid.
 
+---
 
-PART 2 – Temporarily enable Telnet/root with python-miio
---------------------------------------------------------
+## 6. Activarea temporară Telnet/root prin MiIO
 
-On Windows CMD:
+În Windows PowerShell sau CMD:
 
-py -m miio.cli device --ip 192.168.0.44 --token 6134744347534874785067434exxxxxx raw_command set_ip_info "{\"ssid\":\"\\\"\\\"\",\"pswd\":\"123123 ; passwd -d admin ; passwd -d root ; telnetd\"}"
+```powershell
+python -m miio.cli device --ip 192.168.0.100 --token TOKEN raw_command set_ip_info "{\"ssid\":\"\\\"\\\"\",\"pswd\":\"123123 ; passwd -d admin ; passwd -d root ; telnetd\"}"
+```
 
-Then enter:
+Apoi:
 
-telnet 192.168.0.44
+```powershell
+telnet 192.168.0.100
+```
 
-Login:
-admin
+Autentificare:
 
-Password:
-empty Enter
+```text
+Login: admin
+Password: Enter
+```
 
-If admin does not work, try:
-root
+Dacă nu funcționează:
 
-Password:
-empty Enter
+```text
+Login: root
+Password: Enter
+```
 
+---
 
-PART 3 – Physical alternative: 5-2-2-2-2-2-2 sequence
------------------------------------------------------
+## 7. Alternativă fizică temporară
 
-If python-miio is not available or Telnet does not start, Telnet/root can be enabled physically with the sequence:
+Pe firmware-ul compatibil, Telnet poate fi activat temporar prin secvența fizică:
 
+```text
 5-2-2-2-2-2-2
+```
 
-After the sequence, check from Windows:
+Apoi:
 
+```powershell
 telnet HUB_IP
+```
 
-This method is temporary. After reboot/power cycle, Telnet may disappear.
+Această metodă este temporară și poate dispărea după reboot sau power cycle.
 
+---
 
-PART 4 – Checks after entering the hub
---------------------------------------
+# PARTEA B – Verificări inițiale pe hub
 
-On the hub, at the # prompt, run:
+## 8. Verificarea sistemului
 
+După conectarea prin Telnet:
+
+```sh
+uname -a
+```
+
+```sh
+ps w
+```
+
+Verifică Telnet:
+
+```sh
 ps w | grep telnet
+```
 
-netstat -lnp | grep 23
+```sh
+netstat -lnp 2>/dev/null | grep 23
+```
 
+Trebuie să vezi `telnetd` și portul `23` în stare LISTEN.
+
+Verifică fișierele de parole:
+
+```sh
 ls -l /etc/passwd /etc/shadow
+```
 
-Expected result:
-- telnetd is running
-- port 23 listens on :::23
-- /etc/passwd -> /data/musics/passwd
-- /etc/shadow -> /data/musics/shadow
+---
 
+## 9. Verificarea serviciului Zigbee
 
-PART 5 – Check for dangerous old script
----------------------------------------
+```sh
+ps w | grep mzigbee_agent
+```
 
-Run:
+```sh
+ls -l /proc/$(pidof mzigbee_agent)/fd
+```
 
+Pe configurația testată, `mzigbee_agent` ține deschis:
+
+```text
+/dev/ttyS1
+```
+
+Configurația:
+
+```sh
+cat /etc/mzigbeeAgent.conf
+```
+
+Conține:
+
+```text
+chip       : jn5189
+nxp_uart   : /dev/ttyS1
+dataPath   : /data/zigbee/
+illCfg     : 1200,10
+```
+
+---
+
+# PARTEA C – Curățarea scripturilor vechi
+
+## 10. Verificarea directorului de scripturi
+
+```sh
 ls -l /data/scripts 2>/dev/null
+```
 
-If an old or wrong /data/scripts/post_init.sh exists, delete it:
+Dacă există un script vechi sau incorect:
 
+```sh
 rm -f /data/scripts/post_init.sh
 sync
+```
 
-This step is important. A wrong post_init.sh can stop normal Wi-Fi/HomeKit startup.
+Nu da reboot până nu ai creat și verificat scriptul nou.
 
+---
 
-PART 6 – Create correct persistent Telnet
------------------------------------------
+# PARTEA D – Scriptul persistent complet
 
-This is the final tested script.
+## 11. Crearea scriptului
 
-It:
-- starts the Aqara system normally with fw_manager.sh -r
-- waits until wlan0 has an IP
-- then enables Telnet through the official Aqara method: fw_manager.sh -t -k
+Rulează exact pe hub:
 
-Run exactly on the hub:
-
+```sh
 mkdir -p /data/scripts
 
 cat > /data/scripts/post_init.sh <<'EOF'
 #!/bin/sh
 
-fw_manager.sh -r &
+# ============================================================
+# Aqara Hub M1S persistent startup
+#
+# 1. Porneste firmware-ul Aqara normal
+# 2. Activeaza Telnet dupa conectarea Wi-Fi
+# 3. Seteaza Zigbee PA la 0
+# 4. Expune MQTT 127.0.0.1:1883 prin portul LAN 1884
+# ============================================================
 
-(
+LOG_FILE="/tmp/post_init.log"
+MQTT_FIFO="/tmp/aqara_mqtt_pipe"
+MQTT_LOCK="/tmp/aqara_mqtt_tunnel.lock"
+
+log_message()
+{
+    echo "$(date) $1" >> "$LOG_FILE"
+}
+
+wait_for_wifi()
+{
     i=0
-    while [ $i -lt 120 ]; do
+
+    while [ "$i" -lt 120 ]; do
         IP="$(ifconfig wlan0 2>/dev/null | grep 'inet addr')"
+
         if [ "$IP" != "" ]; then
-            sleep 5
-            fw_manager.sh -t -k &
-            exit 0
+            return 0
         fi
+
         sleep 2
         i=$((i+2))
     done
 
-    fw_manager.sh -t -k &
+    return 1
+}
+
+wait_for_mqtt()
+{
+    i=0
+
+    while [ "$i" -lt 120 ]; do
+        if netstat -lnt 2>/dev/null | grep -q '127.0.0.1:1883'; then
+            return 0
+        fi
+
+        sleep 2
+        i=$((i+2))
+    done
+
+    return 1
+}
+
+set_zigbee_pa_zero()
+{
+    if ! wait_for_mqtt; then
+        log_message "MQTT broker not ready; could not set Zigbee PA."
+        return 1
+    fi
+
+    attempt=1
+
+    while [ "$attempt" -le 10 ]; do
+        RESULT="$(zigbee_msnger set_pa 0 2>&1)"
+        echo "$RESULT" >> "$LOG_FILE"
+
+        if echo "$RESULT" | grep -q 'zigbee_pa:0'; then
+            log_message "Zigbee PA successfully set to 0."
+            return 0
+        fi
+
+        sleep 3
+        attempt=$((attempt+1))
+    done
+
+    log_message "Failed to set Zigbee PA to 0."
+    return 1
+}
+
+start_mqtt_tunnel()
+{
+    if ! wait_for_mqtt; then
+        log_message "MQTT broker not ready; tunnel was not started."
+        return 1
+    fi
+
+    if ! mkdir "$MQTT_LOCK" 2>/dev/null; then
+        log_message "MQTT tunnel already appears to be running."
+        return 0
+    fi
+
+    log_message "Starting MQTT tunnel on TCP port 1884."
+
+    while true; do
+        rm -f "$MQTT_FIFO"
+
+        if ! mkfifo "$MQTT_FIFO"; then
+            log_message "Could not create MQTT FIFO; retrying."
+            sleep 5
+            continue
+        fi
+
+        log_message "MQTT tunnel waiting for a client."
+
+        nc -l -p 1884 < "$MQTT_FIFO" |
+            nc 127.0.0.1 1883 > "$MQTT_FIFO"
+
+        log_message "MQTT client disconnected; restarting tunnel."
+
+        rm -f "$MQTT_FIFO"
+        sleep 1
+    done
+}
+
+# Pornire normala a sistemului Aqara.
+# Aceasta linie este obligatorie.
+fw_manager.sh -r &
+
+# Activare Telnet dupa conectarea Wi-Fi.
+(
+    if wait_for_wifi; then
+        sleep 5
+        fw_manager.sh -t -k &
+        log_message "Telnet enabled after Wi-Fi became available."
+    else
+        fw_manager.sh -t -k &
+        log_message "Wi-Fi timeout; Telnet start attempted anyway."
+    fi
+) &
+
+# Setare Zigbee PA la 0.
+(
+    set_zigbee_pa_zero
+) &
+
+# Tunel MQTT permanent.
+(
+    start_mqtt_tunnel
 ) &
 
 exit 0
@@ -154,127 +401,525 @@ EOF
 
 chmod +x /data/scripts/post_init.sh
 sync
+```
 
+---
 
-PART 7 – Verify the script before reboot
-----------------------------------------
+# PARTEA E – Verificarea scriptului înainte de reboot
 
-Run:
+## 12. Verificare sintaxă
 
-cat /data/scripts/post_init.sh
+```sh
+/bin/sh -n /data/scripts/post_init.sh
+echo $?
+```
 
-You must see exactly:
+Rezultat corect:
 
-#!/bin/sh
+```text
+0
+```
 
-fw_manager.sh -r &
+---
 
-(
-    i=0
-    while [ $i -lt 120 ]; do
-        IP="$(ifconfig wlan0 2>/dev/null | grep 'inet addr')"
-        if [ "$IP" != "" ]; then
-            sleep 5
-            fw_manager.sh -t -k &
-            exit 0
-        fi
-        sleep 2
-        i=$((i+2))
-    done
+## 13. Verificarea finalului fișierului
 
-    fw_manager.sh -t -k &
-) &
+```sh
+tail -20 /data/scripts/post_init.sh
+```
 
+Ultima linie trebuie să fie:
+
+```sh
 exit 0
+```
 
-If the file contains lines such as EOF, chmod, cat >, duplicated commands, or wrongly pasted text, DO NOT reboot.
+---
 
+## 14. Verificarea markerilor lipiți accidental
 
-PART 8 – Reboot and test
-------------------------
+```sh
+grep -n -e '^EOF$' -e 'cat >' -e 'chmod' -e 'sync' /data/scripts/post_init.sh
+```
 
-Run:
+Comanda nu trebuie să afișeze nimic.
 
+Nu da reboot dacă fișierul conține accidental:
+
+- `EOF`;
+- `cat >`;
+- `chmod`;
+- `sync`;
+- linii duplicate;
+- prompturi `#` sau `>` lipite în interiorul scriptului.
+
+---
+
+# PARTEA F – Reboot și verificări
+
+## 15. Reboot
+
+```sh
 reboot
+```
 
-After reboot:
-1. wait until the hub joins Wi-Fi
-2. do not press the 5-2-2-2-2-2-2 sequence
-3. test from Windows:
+Așteaptă reconectarea la Wi-Fi și apoi:
 
+```powershell
 telnet HUB_IP
+```
 
-If it enters without the physical sequence, persistent Telnet works.
+Dacă Telnet funcționează fără secvența fizică, metoda persistentă este activă.
 
+---
 
-PART 9 – Final checks
----------------------
+## 16. Verificarea logului de boot
 
-After connecting through Telnet:
+```sh
+cat /tmp/post_init.log
+```
 
+Exemplu de rezultat corect:
+
+```text
+Starting MQTT tunnel on TCP port 1884.
+MQTT tunnel waiting for a client.
+Telnet enabled after Wi-Fi became available.
+zigbee_pa:0
+Zigbee PA successfully set to 0.
+```
+
+Este posibil ca primele linii să aibă data din 1970. Este normal dacă NTP nu era încă sincronizat.
+
+De asemenea, prima încercare `set_pa 0` poate eșua dacă serviciul Zigbee nu este încă gata. Scriptul repetă automat încercarea.
+
+---
+
+## 17. Verificarea Telnet
+
+```sh
 ps w | grep telnet
+```
 
-netstat -lnp | grep 23
+```sh
+netstat -lntp 2>/dev/null | grep ':23'
+```
 
-Expected result:
+Trebuie să vezi `telnetd` și portul `23`.
 
-telnetd is running
+---
 
-and:
+## 18. Verificarea Zigbee PA
 
-tcp 0 0 :::23 :::* LISTEN .../telnetd
+```sh
+zigbee_msnger get_pa
+```
 
+Rezultat:
 
-RECOVERY IF WI-FI DOES NOT START
---------------------------------
+```text
+zigbee_pa:0
+```
 
-If the hub no longer appears on Wi-Fi after reboot, enter through UART/serial and run:
+Pentru revenire temporară:
 
+```sh
+zigbee_msnger set_pa 1
+```
+
+Verificare:
+
+```sh
+zigbee_msnger get_pa
+```
+
+---
+
+## 19. Verificarea tunelului MQTT
+
+```sh
+netstat -lntp 2>/dev/null | grep 1884
+```
+
+Rezultat așteptat:
+
+```text
+tcp 0 0 :::1884 :::* LISTEN .../nc
+```
+
+Din Windows:
+
+```powershell
+Test-NetConnection HUB_IP -Port 1884
+```
+
+Rezultat:
+
+```text
+TcpTestSucceeded : True
+```
+
+Tunelul BusyBox `nc` acceptă un singur client simultan, dar scriptul îl repornește automat după deconectare.
+
+---
+
+# PARTEA G – Conectare MQTT din Windows
+
+## 20. Instalarea clientului Python
+
+```powershell
+python -m pip install paho-mqtt
+```
+
+---
+
+## 21. Ascultarea tuturor topicurilor
+
+```powershell
+python -c "import paho.mqtt.client as mqtt; c=mqtt.Client(mqtt.CallbackAPIVersion.VERSION2); c.on_connect=lambda c,u,f,r,p: (print('CONECTAT:',r),c.subscribe('#')); c.on_message=lambda c,u,m: print(m.topic, m.payload.decode(errors='replace')); c.connect('HUB_IP',1884); c.loop_forever()"
+```
+
+La conectare:
+
+```text
+CONECTAT: Success
+```
+
+Topicuri observate:
+
+```text
+broker/ping
+zigbee/send
+ioctl/recv
+```
+
+Oprire:
+
+```text
+Ctrl+C
+```
+
+După oprire, tunelul revine automat în LISTEN.
+
+---
+
+# PARTEA H – Senzorul intern de iluminare
+
+## 22. Topic și payload
+
+Senzorul intern de lumină raportează pe:
+
+```text
+zigbee/send
+```
+
+Exemplu:
+
+```json
+{
+  "cmd": "report",
+  "id": 2000018442,
+  "did": "lumi.0",
+  "time": 1783888387968,
+  "rssi": 0,
+  "zseq": 0,
+  "params": [
+    {
+      "res_name": "0.3.85",
+      "value": 50
+    }
+  ],
+  "dev_src": "0"
+}
+```
+
+Interpretare:
+
+- `did: lumi.0` = hubul;
+- `res_name: 0.3.85` = senzorul intern de iluminare;
+- `value` = nivelul de lumină raportat.
+
+Configurația:
+
+```text
+illCfg : 1200,10
+```
+
+Probabil înseamnă:
+
+- raportare periodică la aproximativ 120 secunde;
+- raportare la schimbare de aproximativ 10 unități.
+
+Valorile reacționează la întuneric și lanternă, dar pot fi scalate sau filtrate și nu trebuie considerate automat lux calibrați.
+
+---
+
+# PARTEA I – Control RGB prin MQTT
+
+## 23. Topic
+
+```text
+ioctl/recv
+```
+
+Exemplu payload:
+
+```json
+{
+  "cmd": "control",
+  "data": {
+    "blue": 80,
+    "breath": 500,
+    "green": 105,
+    "red": 245
+  },
+  "id": 50001,
+  "type": "rgb",
+  "ver": 1
+}
+```
+
+Test din Windows:
+
+```powershell
+python -c "import json,time,paho.mqtt.client as mqtt; c=mqtt.Client(mqtt.CallbackAPIVersion.VERSION2); c.connect('HUB_IP',1884); c.loop_start(); c.publish('ioctl/recv',json.dumps({'cmd':'control','data':{'blue':80,'breath':500,'green':105,'red':245},'id':50001,'type':'rgb','ver':1})).wait_for_publish(); time.sleep(1); c.disconnect(); c.loop_stop()"
+```
+
+Pe hubul testat, această comandă schimbă culoarea LED-ului.
+
+---
+
+# PARTEA J – Sunet și volum
+
+## 24. Redare WAV prin Telnet
+
+Exemplu:
+
+```sh
+aplay -x 1 /data/musics/music-ch/join_success.wav
+```
+
+La momentul testării:
+
+- RGB prin MQTT este confirmat;
+- iluminarea prin MQTT este confirmată;
+- comanda MQTT pentru volum nu este încă identificată;
+- comanda MQTT pentru redare sunet Aqara nu este încă identificată.
+
+Arhitectura recomandată momentan:
+
+- MQTT pentru stări, senzori și RGB;
+- Telnet pentru WAV și comenzi încă nemapate în MQTT.
+
+---
+
+# PARTEA K – Securitate
+
+## 25. Avertisment MQTT
+
+Portul `1884` expune brokerul intern fără autentificare.
+
+Nu:
+
+- redirecționa portul în router;
+- expune portul în Internet;
+- folosi portul pe Wi-Fi public;
+- publica interfața prin reverse proxy public.
+
+Recomandat:
+
+- VLAN IoT;
+- reguli firewall;
+- acces doar din Home Assistant și stații de administrare.
+
+---
+
+## 26. Avertisment Telnet
+
+Telnet nu este criptat.
+
+Datele de autentificare și comenzile pot fi interceptate în rețea.
+
+Folosește-l doar în LAN de încredere.
+
+---
+
+# PARTEA L – Recuperare
+
+## 27. Recuperare prin UART
+
+Dacă hubul nu mai pornește corect pe Wi-Fi:
+
+- adaptor USB-TTL 3.3 V;
+- GND → GND;
+- TX adaptor → RX hub;
+- RX adaptor → TX hub;
+- nu conecta VCC;
+- viteză: `38400`;
+- format: `8N1`;
+- flow control: none.
+
+Apoi:
+
+```sh
 rm -f /data/scripts/post_init.sh
 sync
 reboot
+```
 
-This removes the hook and the hub returns to normal boot.
+---
 
-UART:
-- USB-TTL adapter 3.3V
-- GND -> GND
-- adapter TX -> hub RX
-- adapter RX -> hub TX
-- DO NOT connect VCC
-- serial speed: 38400, 8N1, flow control none
+# PARTEA M – Dezactivarea unor funcții
 
+## 28. Dezactivare tunel MQTT
 
-IMPORTANT NOTES
----------------
+Editează:
 
-- post_init.sh is executed by /etc/init.d/rcS instead of fw_manager.sh -r.
-- Therefore our script must always start fw_manager.sh -r.
-- fw_manager.sh -t -k is the official method found in the firmware for user behavior/debug:
-  it enables UART debug and starts telnetd.
-- The good method is to wait for an IP on wlan0, then start Telnet.
-- Do not use telnetd -l /bin/sh as a permanent method.
-- Do not apply to many hubs until you test one successfully after reboot and power cycle.
+```sh
+vi /data/scripts/post_init.sh
+```
 
+Elimină:
 
-SHORT CHECK COMMANDS
---------------------
+```sh
+(
+    start_mqtt_tunnel
+) &
+```
 
-MiIO token:
+Apoi:
 
-py -m miio.cli device --ip HUB_IP --token TOKEN info
+```sh
+sync
+reboot
+```
 
-Telnet active:
+---
 
-telnet HUB_IP
+## 29. Revenire Zigbee PA la 1 permanent
 
-Check Telnet on the hub:
+Elimină din script:
 
-ps w | grep telnet
-netstat -lnp | grep 23
+```sh
+(
+    set_zigbee_pa_zero
+) &
+```
 
-Delete persistent script:
+Apoi:
 
+```sh
+sync
+reboot
+```
+
+---
+
+## 30. Eliminarea completă a modificărilor persistente
+
+```sh
 rm -f /data/scripts/post_init.sh
 sync
 reboot
+```
+
+Aceasta elimină:
+
+- Telnet persistent;
+- Zigbee PA 0 persistent;
+- tunel MQTT persistent.
+
+Hubul revine la pornirea originală.
+
+---
+
+# PARTEA N – Comenzi rapide de verificare
+
+## Telnet
+
+```sh
+ps w | grep telnet
+netstat -lntp 2>/dev/null | grep ':23'
+```
+
+## Zigbee PA
+
+```sh
+zigbee_msnger get_pa
+```
+
+## MQTT intern
+
+```sh
+netstat -lntp 2>/dev/null | grep 1883
+```
+
+Rezultat așteptat:
+
+```text
+127.0.0.1:1883
+```
+
+## Tunel MQTT
+
+```sh
+netstat -lntp 2>/dev/null | grep 1884
+```
+
+## Log startup
+
+```sh
+cat /tmp/post_init.log
+```
+
+## Servicii importante
+
+```sh
+ps w | grep -e mha_basis -e mha_master -e mzigbee_agent -e homekitserver -e app_monitor
+```
+
+Aceste servicii trebuie să rămână active.
+
+---
+
+# PARTEA O – Direcția pentru integrarea Home Assistant
+
+Următoarea versiune a integrării poate folosi:
+
+## MQTT
+
+- abonare la `zigbee/send`;
+- senzor iluminare din `res_name: 0.3.85`;
+- entitate `light` prin publish pe `ioctl/recv`;
+- ascultare evenimente și stări locale.
+
+## Telnet
+
+- redare WAV;
+- listare fișiere;
+- comenzi încă nemapate în MQTT;
+- diagnostic avansat.
+
+## Recomandare arhitecturală
+
+- un singur client MQTT per config entry;
+- reconectare automată;
+- senzori actualizați push, fără polling;
+- Telnet folosit doar când este necesar;
+- opțiune separată pentru `set_pa 0`;
+- verificare de disponibilitate pentru porturile `23` și `1884`.
+
+---
+
+# Concluzie
+
+Configurația finală păstrează firmware-ul original Aqara și funcțiile importante ale hubului, dar adaugă:
+
+- Telnet/root persistent;
+- Zigbee PA setat la `0`;
+- tunel MQTT permanent;
+- acces la senzorul intern de iluminare;
+- control RGB prin MQTT;
+- bază pentru o integrare Home Assistant locală mai completă.
+
+Metoda recomandată nu mai oprește `mzigbee_agent` sau `app_monitor.sh`, deoarece acestea sunt necesare pentru mai multe funcții locale ale hubului.

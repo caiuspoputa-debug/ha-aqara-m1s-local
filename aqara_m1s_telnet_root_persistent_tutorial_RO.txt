@@ -199,8 +199,10 @@ ls -l /etc/passwd /etc/shadow
 ps w | grep mzigbee_agent
 ```
 
+BusyBox on the tested firmware does not include `pidof`. Note the PID shown by `ps`, then run:
+
 ```sh
-ls -l /proc/$(pidof mzigbee_agent)/fd
+ls -l /proc/PID/fd
 ```
 
 On the tested configuration, `mzigbee_agent` keeps this device open:
@@ -245,11 +247,48 @@ Do not reboot until the new script has been created and verified.
 
 ---
 
-# PART D – Complete persistent startup script
+# PART D – Create the permanent MQTT tunnel and startup scripts
 
-## 11. Create the script
+## 11. Create `/data/scripts/mqtt_tunnel.sh`
 
-Run the following exactly on the hub:
+The tested tunnel uses a separate self-restarting script:
+
+```sh
+cat > /data/scripts/mqtt_tunnel.sh <<'EOF'
+#!/bin/sh
+
+LOG_FILE="/tmp/post_init.log"
+MQTT_FIFO="/tmp/aqara_mqtt_pipe"
+
+while true; do
+    while ! netstat -lnt 2>/dev/null | grep -q '127.0.0.1:1883'; do
+        sleep 2
+    done
+
+    killall nc 2>/dev/null
+    rm -f "$MQTT_FIFO"
+    mkfifo "$MQTT_FIFO"
+
+    echo "$(date) MQTT tunnel waiting for a client." >> "$LOG_FILE"
+
+    cat "$MQTT_FIFO" |
+        nc -l -p 1884 |
+        nc 127.0.0.1 1883 > "$MQTT_FIFO"
+
+    echo "$(date) MQTT client disconnected; restarting tunnel." >> "$LOG_FILE"
+
+    rm -f "$MQTT_FIFO"
+    sleep 1
+done
+EOF
+
+chmod +x /data/scripts/mqtt_tunnel.sh
+sync
+```
+
+This BusyBox `nc` tunnel accepts one active client at a time and recreates itself after disconnection.
+
+## 12. Create `/data/scripts/post_init.sh`
 
 ```sh
 mkdir -p /data/scripts
@@ -257,18 +296,7 @@ mkdir -p /data/scripts
 cat > /data/scripts/post_init.sh <<'EOF'
 #!/bin/sh
 
-# ============================================================
-# Aqara Hub M1S persistent startup
-#
-# 1. Starts the Aqara firmware normally
-# 2. Enables Telnet after Wi-Fi connects
-# 3. Sets Zigbee PA to 0
-# 4. Exposes MQTT 127.0.0.1:1883 through LAN port 1884
-# ============================================================
-
 LOG_FILE="/tmp/post_init.log"
-MQTT_FIFO="/tmp/aqara_mqtt_pipe"
-MQTT_LOCK="/tmp/aqara_mqtt_tunnel.lock"
 
 log_message()
 {
@@ -335,46 +363,10 @@ set_zigbee_pa_zero()
     return 1
 }
 
-start_mqtt_tunnel()
-{
-    if ! wait_for_mqtt; then
-        log_message "MQTT broker not ready; tunnel was not started."
-        return 1
-    fi
-
-    if ! mkdir "$MQTT_LOCK" 2>/dev/null; then
-        log_message "MQTT tunnel already appears to be running."
-        return 0
-    fi
-
-    log_message "Starting MQTT tunnel on TCP port 1884."
-
-    while true; do
-        rm -f "$MQTT_FIFO"
-
-        if ! mkfifo "$MQTT_FIFO"; then
-            log_message "Could not create MQTT FIFO; retrying."
-            sleep 5
-            continue
-        fi
-
-        log_message "MQTT tunnel waiting for a client."
-
-        nc -l -p 1884 < "$MQTT_FIFO" |
-            nc 127.0.0.1 1883 > "$MQTT_FIFO"
-
-        log_message "MQTT client disconnected; restarting tunnel."
-
-        rm -f "$MQTT_FIFO"
-        sleep 1
-    done
-}
-
-# Start the Aqara system normally.
-# This line is mandatory.
+# Mandatory: start the original Aqara firmware.
 fw_manager.sh -r &
 
-# Enable Telnet after Wi-Fi connects.
+# Enable Telnet after Wi-Fi becomes available.
 (
     if wait_for_wifi; then
         sleep 5
@@ -391,9 +383,9 @@ fw_manager.sh -r &
     set_zigbee_pa_zero
 ) &
 
-# Permanent MQTT tunnel.
+# Start the self-restarting MQTT tunnel.
 (
-    start_mqtt_tunnel
+    /data/scripts/mqtt_tunnel.sh
 ) &
 
 exit 0
@@ -407,17 +399,23 @@ sync
 
 # PART E – Verify the script before reboot
 
-## 12. Syntax check
+## 13. Syntax check
 
 ```sh
 /bin/sh -n /data/scripts/post_init.sh
-echo $?
+echo "post_init=$?"
+```
+
+```sh
+/bin/sh -n /data/scripts/mqtt_tunnel.sh
+echo "mqtt_tunnel=$?"
 ```
 
 Correct result:
 
 ```text
-0
+post_init=0
+mqtt_tunnel=0
 ```
 
 ---
@@ -537,15 +535,28 @@ zigbee_msnger get_pa
 
 ## 19. Check the MQTT tunnel
 
+Check the processes:
+
+```sh
+ps w | grep -e mqtt_tunnel -e 'nc -l'
+```
+
+When no client is connected:
+
 ```sh
 netstat -lntp 2>/dev/null | grep 1884
 ```
 
-Expected result:
+When a client is already connected, BusyBox `nc` may no longer appear in `LISTEN`. Check the kernel TCP table instead:
 
-```text
-tcp 0 0 :::1884 :::* LISTEN .../nc
+```sh
+grep -i ':075C' /proc/net/tcp /proc/net/tcp6
 ```
+
+`075C` is port `1884` in hexadecimal.
+
+- state `0A` = LISTEN
+- state `01` = ESTABLISHED
 
 From Windows:
 
@@ -713,6 +724,49 @@ Recommended architecture for now:
 
 ---
 
+# PART J2 – Confirmed audio findings
+
+## 25. Official Aqara audio process
+
+Monitoring `/proc/*/fd` during official sound playback confirmed that the process:
+
+```text
+mha_basis
+```
+
+opens the playback device:
+
+```text
+/dev/snd/pcmC0D0p
+```
+
+It also opens the selected official WAV file, for example:
+
+```text
+/data/musics/music-us/add_sensor.wav
+```
+
+This confirms that official Aqara audio playback is handled by `mha_basis`.
+
+## 26. Current audio status
+
+Confirmed:
+
+- direct WAV playback through `aplay` works;
+- official Aqara playback is performed by `mha_basis`;
+- official WAV files are read from `/data/musics/...`;
+- RGB and illuminance traffic are visible through MQTT.
+
+Not yet confirmed:
+
+- the command path used to request official sound playback;
+- the volume-control command;
+- an MQTT topic or payload for audio control.
+
+Changing the official volume can generate RGB feedback messages, but those messages must not be treated as the actual audio command.
+
+---
+
 # PART K – Security
 
 ## 25. MQTT warning
@@ -763,6 +817,7 @@ Then:
 
 ```sh
 rm -f /data/scripts/post_init.sh
+rm -f /data/scripts/mqtt_tunnel.sh
 sync
 reboot
 ```
@@ -783,7 +838,7 @@ Remove:
 
 ```sh
 (
-    start_mqtt_tunnel
+    /data/scripts/mqtt_tunnel.sh
 ) &
 ```
 

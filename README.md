@@ -1,4 +1,4 @@
-# Aqara M1S Local v0.5.5
+# Aqara M1S Local v0.5.6
 
 Maintenance release for HACS installation.
 
@@ -300,3 +300,11 @@ RGB command example:
 - Playing a sound no longer triggers the Aqara doorbell LED-ring effect.
 - Starting a new sound stops the previous direct sound playback.
 - The Sound Playback Volume slider is not applied to direct `aplay` sounds.
+
+
+## v0.5.6
+
+- Custom WAV buttons use a one-shot FFmpeg pipeline for software volume.
+- Audio is played through direct `aplay`, so the Aqara LED ring is not triggered.
+- A dedicated source/sink pair prevents overlapping playback paths.
+- The Sound Playback Volume slider is applied before PCM reaches the hub.

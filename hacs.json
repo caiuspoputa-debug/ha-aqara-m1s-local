@@ -1,6 +1,4 @@
 {
   "name": "Aqara M1S Local",
-  "homeassistant": "2024.1.0",
-  "zip_release": true,
-  "filename": "aqara_m1s_local_0_5_1.zip"
+  "homeassistant": "2024.1.0"
 }

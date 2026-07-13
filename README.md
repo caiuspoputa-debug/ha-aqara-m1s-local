@@ -1,3 +1,14 @@
+## v0.4.5
+
+Corecție de performanță pentru redarea sunetelor.
+
+- Înlocuiește copierea WAV-ului cu un link simbolic rapid:
+  `ln -sf <sunet> /data/musics/music-scene/door_bell_99.wav`
+- Elimină întârzierea mare dintre apăsarea butonului și pornirea sunetului.
+- Păstrează redarea oficială prin `basis_cli`, `system_sing` și `mha_basis`.
+- Toate sunetele continuă să respecte sliderul `Sound Playback Volume`.
+
+
 ## v0.4.4
 
 Corecție pentru `Sound Playback Volume`.

@@ -93,6 +93,7 @@ class AqaraM1SRadioPlayer(MediaPlayerEntity):
         self._ffmpeg: asyncio.subprocess.Process | None = None
         self._lock = asyncio.Lock()
         self._watch_task: asyncio.Task | None = None
+        self._volume_restart_task: asyncio.Task | None = None
         self._attr_device_info = {
             "identifiers": {(DOMAIN, client.host)},
             "name": entry.data.get("name", f"Aqara M1S {client.host}"),
@@ -108,6 +109,9 @@ class AqaraM1SRadioPlayer(MediaPlayerEntity):
         self.hass.async_create_task(self.async_shutdown())
 
     async def async_shutdown(self) -> None:
+        if self._volume_restart_task:
+            self._volume_restart_task.cancel()
+            self._volume_restart_task = None
         async with self._lock:
             await self._stop_locked(update_state=False)
 
@@ -158,24 +162,50 @@ class AqaraM1SRadioPlayer(MediaPlayerEntity):
         await self.async_media_stop()
 
     async def async_set_volume_level(self, volume: float) -> None:
+        """Set volume and debounce the FFmpeg restart.
+
+        The hub does not expose a proven safe live-volume command through the
+        current Telnet transport. FFmpeg therefore still has to be restarted,
+        but only once after the slider stops moving instead of once per step.
+        """
         volume = max(0.0, min(1.0, float(volume)))
-        async with self._lock:
-            self._attr_volume_level = volume
-            self._attr_is_volume_muted = volume == 0.0
-            if self._attr_state == MediaPlayerState.PLAYING and self._media_url:
-                # FFmpeg's volume filter is fixed for this process. Restarting the
-                # stream applies the new level with only a short reconnect gap.
-                await self._start_locked()
-            else:
-                self.async_write_ha_state()
+        self._attr_volume_level = volume
+        self._attr_is_volume_muted = volume == 0.0
+        self.async_write_ha_state()
+
+        if self._volume_restart_task:
+            self._volume_restart_task.cancel()
+            self._volume_restart_task = None
+
+        if self._attr_state == MediaPlayerState.PLAYING and self._media_url:
+            self._volume_restart_task = self.hass.async_create_task(
+                self._restart_after_volume_settle()
+            )
+
+    async def _restart_after_volume_settle(self) -> None:
+        """Apply the final slider value after a short quiet period."""
+        try:
+            await asyncio.sleep(0.7)
+            async with self._lock:
+                if self._attr_state == MediaPlayerState.PLAYING and self._media_url:
+                    await self._start_locked()
+        except asyncio.CancelledError:
+            return
+        finally:
+            if self._volume_restart_task is asyncio.current_task():
+                self._volume_restart_task = None
 
     async def async_mute_volume(self, mute: bool) -> None:
-        async with self._lock:
-            self._attr_is_volume_muted = bool(mute)
-            if self._attr_state == MediaPlayerState.PLAYING and self._media_url:
+        self._attr_is_volume_muted = bool(mute)
+        self.async_write_ha_state()
+
+        if self._volume_restart_task:
+            self._volume_restart_task.cancel()
+            self._volume_restart_task = None
+
+        if self._attr_state == MediaPlayerState.PLAYING and self._media_url:
+            async with self._lock:
                 await self._start_locked()
-            else:
-                self.async_write_ha_state()
 
     async def _start_locked(self) -> None:
         if not self._media_url:

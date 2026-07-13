@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import shlex
 
-from homeassistant.components import button, light, number, select, sensor
+from homeassistant.components import button, light, media_player, number, select, sensor
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     CONF_HOST,
@@ -19,6 +19,7 @@ from .const import (
     DATA_CLIENTS,
     DATA_MQTT_CLIENTS,
     DATA_PLAYBACK_VOLUME,
+    DATA_RADIO_PLAYERS,
     DATA_SELECTED_SOUND,
     DATA_SOUND_MAP,
     DEFAULT_MQTT_PORT,
@@ -35,6 +36,7 @@ from .mqtt_client import AqaraM1SMqttClient
 PLATFORMS = [
     button.DOMAIN,
     light.DOMAIN,
+    media_player.DOMAIN,
     number.DOMAIN,
     sensor.DOMAIN,
     select.DOMAIN,
@@ -104,6 +106,7 @@ async def async_setup_entry(
     )
     hass.data[DOMAIN].setdefault(
         DATA_PLAYBACK_VOLUME,
+    DATA_RADIO_PLAYERS,
         {},
     )
 
@@ -248,6 +251,13 @@ async def async_unload_entry(
     ].pop(entry.entry_id, None)
     if mqtt_client:
         await mqtt_client.stop()
+
+    radio_player = hass.data[DOMAIN][DATA_RADIO_PLAYERS].pop(
+        entry.entry_id,
+        None,
+    )
+    if radio_player:
+        await radio_player.async_shutdown()
 
     telnet_client = hass.data[DOMAIN][DATA_CLIENTS].pop(
         entry.entry_id,

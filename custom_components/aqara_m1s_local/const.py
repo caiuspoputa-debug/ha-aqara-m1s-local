@@ -24,3 +24,5 @@ DATA_PLAYBACK_VOLUME = "playback_volume"
 
 MQTT_TOPIC_ZIGBEE = "zigbee/send"
 MQTT_TOPIC_RGB = "ioctl/recv"
+
+DATA_RADIO_PLAYERS = "radio_players"

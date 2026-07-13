@@ -1,4 +1,4 @@
-# Aqara M1S Local v0.5.3
+# Aqara M1S Local v0.5.4
 
 Maintenance release for HACS installation.
 
@@ -15,7 +15,7 @@ Maintenance release for HACS installation.
 
 Create the GitHub release with:
 
-- Tag: `v0.5.3`
+- Tag: `v0.5.4`
 - Asset: `aqara_m1s_local_v0_5_3.zip`
 
 
@@ -286,3 +286,10 @@ RGB command example:
   "ver": 1
 }
 ```
+
+
+## v0.5.4
+
+- Debounces radio volume changes so moving the Home Assistant slider causes one short stream restart after the final value, instead of one interruption at every intermediate step.
+- Keeps mute immediate.
+- Does not claim unsupported direct hardware-volume control; the current Telnet path has no proven safe command for `basis.system / system_volume`.

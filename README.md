@@ -1,70 +1,108 @@
 # Aqara M1S Local
 
-## v0.3.4
+## v0.4.0
 
-Stable playback cleanup:
+This release extends the existing integration. It does **not** require
+HomeKit for the new MQTT features.
 
-- Uses `aplay -x 1` everywhere, so each WAV plays once.
-- Creates one Play button for every WAV found under `/data/musics`.
-- Keeps `select.sound` plus `Play Selected Sound`.
-- Removes the misleading local playback volume slider.
-- Removes `setprop persist.sys.volume` from local WAV playback.
+### Added
 
-Important volume note:
+- `light.ring_light`
+  - On/off
+  - RGB color
+  - Brightness implemented by scaling RGB values
+  - Transition mapped to the hub's `breath` field
+  - Publishes directly to the hub topic `ioctl/recv`
+- `sensor.illuminance_raw`
+  - Reads gateway resource `0.3.85` from `zigbee/send`
+  - The raw scale reacts to ambient light, but it has not yet been
+    calibrated or proven to be physical lux
+- Configurable MQTT tunnel port, default `1884`
+- Automatic MQTT reconnect
+- Wi-Fi IP parser fixed so it returns the address rather than the shell
+  command text
 
-Local WAV playback uses direct `aplay`, which bypasses the Aqara/HomeKit audio backend.
-That means HomeKit volume and `persist.sys.volume` do not affect these local sounds.
-For local custom WAVs, volume must be controlled by lowering the WAV file amplitude.
+### Existing features retained
 
-Use HomeKit for light, official volume and alarm control.
-Use Aqara M1S Local for local WAV playback and diagnostics.
-## Tutorials
+- Telnet diagnostics
+- One button per WAV under `/data/musics`
+- Selected-sound playback
+- Temperature, uptime, process and stored-volume sensors
+- Services for WAV playback and shell commands
 
-### Persistent Telnet/root
+## Important volume status
 
-Explains how to enable persistent Telnet/root access on Aqara Hub M1S without flashing firmware, without modifying rootfs, and without breaking Wi-Fi or HomeKit.
+`Volume Property` remains a read-only sensor.
 
-* Romanian: [`docs/telnet_root_persistent_RO.txt`](docs/telnet_root_persistent_RO.txt)
-* English: [`docs/telnet_root_persistent_EN.txt`](docs/telnet_root_persistent_EN.txt)
+We confirmed the official live-volume path:
 
-### Persistent Aqara Zigbee shutdown
+```text
+set_properties: siid=5, piid=2
+-> mha_master
+-> basis.system / system_volume
+-> mha_basis
+```
 
-Explains how to stop the Aqara Zigbee service permanently after boot, while keeping Telnet, HomeKit, light, sound, and MiIO services running.
+However, this integration does not yet have an independent, proven and
+safe transport into that internal agent path. `setprop
+persist.sys.volume` only changes stored state and is not presented as a
+working live-volume control.
 
-Useful when the hub has no paired Zigbee devices and you want to reduce possible Zigbee noise near Zigbee2MQTT.
+## Hub prerequisites
 
-* Romanian: [`docs/stop_zigbee_persistent_RO.txt`](docs/stop_zigbee_persistent_RO.txt)
-* English: [`docs/stop_zigbee_persistent_EN.txt`](docs/stop_zigbee_persistent_EN.txt)
+The hub must already provide:
 
-### HomeKit cleanup and repair
+- Telnet on port `23`
+- The local one-client MQTT tunnel on port `1884`
+- Internal Mosquitto on `127.0.0.1:1883`
 
-Explains how to clean old HomeKit pairing data, restart HomeKit/mDNS, and make the hub appear again in Home Assistant as a HomeKit Device.
+The tunnel accepts **one LAN MQTT client at a time**. Stop manual Paho,
+MQTT Explorer or command-line subscribers before reloading this
+integration, otherwise Home Assistant cannot own the tunnel connection.
 
-Use this when HomeKit pairing is broken, stuck, or the hub says it is already paired.
+## Upgrade
 
-* Romanian: [`docs/homekit_cleanup_repair_RO.txt`](docs/homekit_cleanup_repair_RO.txt)
-* English: [`docs/homekit_cleanup_repair_EN.txt`](docs/homekit_cleanup_repair_EN.txt)
+Copy:
 
-### Custom WAV audio
+```text
+custom_components/aqara_m1s_local
+```
 
-Explains how to convert MP3/WAV files into the Aqara M1S-compatible WAV format, test playback with `aplay -x 1`, replace `arm_ok.wav`, and control local playback volume by lowering WAV amplitude.
+over the existing folder, restart Home Assistant, then reload the
+integration.
 
-* Romanian: [`docs/audio_wav_custom_RO.txt`](docs/audio_wav_custom_RO.txt)
-* English: [`docs/audio_wav_custom_EN.txt`](docs/audio_wav_custom_EN.txt)
+Existing config entries use MQTT port `1884` automatically. A new entry
+also shows the MQTT port in the setup form.
 
-### HomeKit + local integration + automations architecture
+## First test
 
-Explains the final stable architecture:
+1. Stop any manual subscriber connected to hub port `1884`.
+2. Restart Home Assistant.
+3. Open the Aqara M1S device.
+4. Test `Ring Light` with a low brightness and a simple RGB color.
+5. Cover and uncover the hub to verify `Illuminance Raw` changes.
 
-* HomeKit handles light, RGB, brightness, official volume, and alarm control.
+## Confirmed protocol mappings
 
-* Aqara M1S Local handles local WAV playback, `play_url`, internal sound buttons, and diagnostics.
+```text
+MQTT LED command topic: ioctl/recv
+MQTT gateway reports:   zigbee/send
+Gateway illumination:   did=lumi.0, res_name=0.3.85
+```
 
-* Zigbee can be disabled when not used.
+RGB command example:
 
-* Home Assistant automations should preserve day/night volume logic and existing entity structure.
-
-* Romanian: [`docs/architecture_ha_automations_RO.txt`](docs/architecture_ha_automations_RO.txt)
-
-* English: [`docs/architecture_ha_automations_EN.txt`](docs/architecture_ha_automations_EN.txt)
-
+```json
+{
+  "cmd": "control",
+  "data": {
+    "blue": 80,
+    "breath": 500,
+    "green": 105,
+    "red": 245
+  },
+  "id": 50001,
+  "type": "rgb",
+  "ver": 1
+}
+```

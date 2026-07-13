@@ -86,7 +86,6 @@ async def async_setup_entry(
     )
     hass.data[DOMAIN].setdefault(
         DATA_SOUND_MAP,
-    DATA_SOUND_PLAYERS,
         {},
     )
     hass.data[DOMAIN].setdefault(

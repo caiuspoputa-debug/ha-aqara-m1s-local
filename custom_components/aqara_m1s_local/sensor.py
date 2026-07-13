@@ -351,6 +351,9 @@ class AqaraM1SIlluminanceRawSensor(
             )
         )
 
+        self._attr_available = self.mqtt_client.connected
+        self.async_write_ha_state()
+
     def _handle_status(
         self,
         connected: bool,

@@ -86,6 +86,9 @@ class AqaraM1SRingLight(LightEntity):
             )
         )
 
+        self._attr_available = self.mqtt_client.connected
+        self.async_write_ha_state()
+
     async def async_turn_on(self, **kwargs) -> None:
         if ATTR_RGB_COLOR in kwargs:
             self._attr_rgb_color = tuple(

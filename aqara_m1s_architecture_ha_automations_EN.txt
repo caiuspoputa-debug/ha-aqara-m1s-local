@@ -1,40 +1,67 @@
-Aqara M1S - Final architecture: HomeKit + local + automations
-================================================================
+Aqara M1S – Final Architecture: HomeKit + Local Integration + Automations
+========================================================================
 
 Purpose:
-- clarify what HomeKit should handle
-- what the local Aqara M1S integration should handle
-- what should NOT be controlled locally
-- document findings about volume, sound, light, and Zigbee
+- define the responsibilities of HomeKit and the local integration;
+- document the confirmed functions;
+- avoid commands that may freeze or destabilize the hub;
+- document sound playback and the required WAV format;
+- maintain a stable and easy-to-manage architecture.
 
 
 ============================================================
-1. Recommended stable architecture
+1. Recommended architecture
 ============================================================
 
-HomeKit remains responsible for:
-- hub light
-- RGB color
-- brightness
-- official volume
-- alarm_control_panel
-- pairing / identify
+HomeKit can remain responsible for:
 
-The local Aqara M1S integration remains responsible for:
-- local WAV playback
-- play_url
-- buttons for internal sounds
-- Telnet diagnostics
-- process diagnostics
-- local temperature
-- uptime
-- Wi-Fi IP
+- alarm_control_panel;
+- arming and disarming;
+- Home, Away, and Night states;
+- the hub's official volume;
+- the hub light, when existing automations already use HomeKit entities;
+- pairing and identify.
 
-Do not force everything into one integration if HomeKit works reliably.
+The Aqara M1S Local integration can manage:
+
+- playback of internal sounds;
+- playback of custom WAV sounds;
+- buttons for files from music-ch;
+- buttons for files from music-us;
+- buttons for files from music-scene;
+- playback volume control for local sounds;
+- local LED control;
+- information and diagnostics available through Telnet;
+- confirmed local sensors;
+- the local MQTT connection;
+- the persistent Telnet connection.
+
+It is not necessary to move every function into a single integration.
+
+Existing HomeKit automations can remain unchanged, while the local integration
+can be used for additional functions.
 
 
 ============================================================
-2. Important HomeKit entities
+2. Current integration version
+============================================================
+
+Current version:
+
+Aqara M1S Local v0.4.6
+
+Important improvements:
+
+- persistent Telnet connection;
+- a new Telnet session is no longer opened for every command;
+- sound playback starts quickly;
+- automatic reconnection if the hub closes the session;
+- commands are executed serially;
+- the connection is closed cleanly when the integration is unloaded.
+
+
+============================================================
+3. Important HomeKit entities
 ============================================================
 
 Hub aqarahublight:
@@ -49,30 +76,278 @@ number.aqara_hub_m1s_2653_volume
 alarm_control_panel.aqara_hub_m1s_2653_security_system
 light.aqara_hub_m1s_2653_lightbulb
 
+Do not switch entities between hubs without verification.
+
 
 ============================================================
-3. Day/night volume in automations
+4. Official hub volume
 ============================================================
 
-Example for volume 20 at night and 60 during the day:
+The official volume is managed internally through:
+
+basis.system/system_volume
+
+Main process involved:
+
+mha_basis
+
+Associated internal property:
+
+persist.sys.volume
+
+In HomeKit, official volume is exposed through:
+
+siid = 5
+piid = 2
+
+The corresponding Home Assistant entities may be:
+
+number.aqarahublight_volume
+number.aqara_hub_m1s_2653_volume
+
+
+============================================================
+5. Local playback volume
+============================================================
+
+The local integration exposes:
+
+Sound Playback Volume
+
+Range:
+
+1–100
+
+The value is passed directly to the official playback command:
+
+/bin/basis_cli -sys -s doorbell 99 0 <volume>
+
+Example:
+
+/bin/basis_cli -sys -s doorbell 99 0 30
+
+This method respects volume and uses the official route:
+
+basis_cli
+→ basis.system/system_sing
+→ mha_basis
+
+aplay is no longer used for normal sound playback from the integration.
+
+aplay bypasses official volume control and should not be used for the main
+playback buttons.
+
+
+============================================================
+6. Internal sound playback
+============================================================
+
+Confirmed official command:
+
+/bin/basis_cli -sys -s <type> <index> <duration> <volume>
+
+Confirmed types:
+
+alarm
+doorbell
+welcome
+
+Example:
+
+/bin/basis_cli -sys -s doorbell 1 0 30
+
+Parameters:
+
+type       = alarm, doorbell, or welcome
+index      = sound number
+duration   = 0 for one-time playback
+volume     = 1–100
+
+
+============================================================
+7. Custom WAV playback
+============================================================
+
+Slot reserved for the integration:
+
+/data/musics/music-scene/door_bell_99.wav
+
+The integration no longer copies the WAV file before every playback.
+
+It uses a symbolic link:
+
+ln -sf <source_file> \
+/data/musics/music-scene/door_bell_99.wav
+
+Then it runs:
+
+/bin/basis_cli -sys -s doorbell 99 0 <volume>
+
+Complete example:
+
+ln -sf /data/musics/music-ch/add_sensor.wav \
+/data/musics/music-scene/door_bell_99.wav \
+&& /bin/basis_cli -sys -s doorbell 99 0 30
+
+Advantages:
+
+- almost instant playback;
+- no repeated file copying;
+- controllable volume;
+- all sounds use the official mha_basis playback route.
+
+
+============================================================
+8. Confirmed WAV format
+============================================================
+
+The format reported by the hub for:
+
+/data/musics/music-ch/add_sensor.wav
+
+is:
+
+format       : S32_LE
+channels     : 1
+rate         : 32000
+exact rate   : 32000
+msbits       : 32
+
+Recommended format for custom sounds:
+
+- PCM WAV;
+- signed 32-bit little-endian;
+- mono;
+- 32000 Hz;
+- 32-bit.
+
+FFmpeg example:
+
+ffmpeg -i input.mp3 \
+-ac 1 \
+-ar 32000 \
+-c:a pcm_s32le \
+output.wav
+
+
+============================================================
+9. Installed custom sounds
+============================================================
+
+File:
+
+/data/musics/music-ch/add_sensor.wav
+
+Current content:
+
+Paul
+
+Preserved Home Assistant entity:
+
+button.aqara_m1s_local_play_ch_add_sensor_2
+
+The original file was saved as:
+
+/data/musics/music-ch/add_sensor_original.wav
+
+The content of add_sensor_original.wav can be replaced with:
+
+Narcisa
+
+The entity keeps its existing name so automations do not need to be changed.
+
+
+============================================================
+10. Transferring files from Windows
+============================================================
+
+The hub does not provide SSH on port 22.
+
+scp does not work:
+
+ssh: connect to host 192.168.0.100 port 22: Connection refused
+
+File transfer is performed temporarily with BusyBox nc.
+
+On the hub:
+
+nc -l -p 12345 > /destination/path/file.wav
+
+Example:
+
+nc -l -p 12345 > \
+/data/musics/music-ch/add_sensor_original.wav
+
+On Windows PowerShell:
+
+$client = New-Object System.Net.Sockets.TcpClient(
+  "192.168.0.100",
+  12345
+)
+
+$stream = $client.GetStream()
+
+$bytes = [System.IO.File]::ReadAllBytes(
+  "C:\path\file.wav"
+)
+
+$stream.Write($bytes, 0, $bytes.Length)
+$stream.Close()
+$client.Close()
+
+After the transfer, verify the file size on the hub:
+
+ls -l /data/musics/music-ch/file.wav
+
+
+============================================================
+11. Backup before replacing a sound
+============================================================
+
+Before replacing an original file:
+
+cp file.wav file_original.wav
+
+Example:
+
+cp /data/musics/music-ch/add_sensor.wav \
+/data/musics/music-ch/add_sensor_original.wav
+
+Always verify that the backup exists before overwriting the original file.
+
+
+============================================================
+12. Day/night volume automations
+============================================================
+
+Example: volume 20 at night and 60 during the day:
 
 value: >-
-  {% if now().hour >= 21 or now().hour < 9 %} 20 {% else %} 60
+  {% if now().hour >= 21 or now().hour < 9 %}
+    20
+  {% else %}
+    60
   {% endif %}
 
-Example for volume 5 at night and 25 during the day:
+Example: volume 5 at night and 25 during the day:
 
 value: >-
-  {% if now().hour >= 21 or now().hour < 8 %} 5 {% else %} 25
+  {% if now().hour >= 21 or now().hour < 8 %}
+    5
+  {% else %}
+    25
   {% endif %}
+
+Do not remove volume blocks when they contain day/night logic.
 
 
 ============================================================
-4. Difference between trigger, action, and entity
+13. Trigger, action, and entity
 ============================================================
 
 Trigger:
-- starts the automation
+
+Starts the automation.
 
 Example:
 
@@ -82,23 +357,55 @@ triggers:
     to: "on"
     trigger: state
 
-Actions:
-- what the automation does after the trigger
-- set volume
-- start alarm
-- turn on light
-- stop alarm
-- restore scene
+Action:
 
-Entities:
-- all devices/objects used in triggers or actions
+Represents the operations executed after the trigger:
+
+- changing the volume;
+- playing a sound;
+- starting the alarm;
+- changing the LED color;
+- restoring a scene.
+
+Entity:
+
+The Home Assistant device or object used in a trigger or action.
 
 
 ============================================================
-5. Red/green light
+14. Hub light
 ============================================================
 
-Simple red -> green sequence:
+Local LED control is confirmed through MQTT.
+
+Topic:
+
+ioctl/recv
+
+Example payload:
+
+{
+  "cmd": "control",
+  "data": {
+    "blue": 80,
+    "breath": 500,
+    "green": 105,
+    "red": 245
+  },
+  "id": 50001,
+  "type": "rgb",
+  "ver": 1
+}
+
+HomeKit entities can continue to be used in existing automations:
+
+light.aqarahublight_lightbulb
+light.aqara_hub_m1s_2653_lightbulb
+
+
+============================================================
+15. Red-green light sequence
+============================================================
 
 - continue_on_error: true
   target:
@@ -133,10 +440,10 @@ repeat:
 
 
 ============================================================
-6. Light snapshot
+16. Light snapshot
 ============================================================
 
-To restore the original light state, create a snapshot scene:
+Creating the snapshot:
 
 - data:
     scene_id: snapshot_bec
@@ -144,7 +451,7 @@ To restore the original light state, create a snapshot scene:
       - light.aqarahublight_lightbulb
   action: scene.create
 
-At the end:
+Restoring the snapshot:
 
 - continue_on_error: true
   target:
@@ -157,57 +464,117 @@ snapshot_entities:
   - light.aqarahublight_lightbulb
   - light.aqara_hub_m1s_2653_lightbulb
 
+Do not remove existing snapshot scenes from automations.
+
 
 ============================================================
-7. Sound through alarm_control_panel
+17. Alarm control panel
 ============================================================
 
-Official Aqara/HomeKit sound works through:
+Possible entity:
 
 alarm_control_panel.aqarahublight_security_system
 
-Useful actions:
+Confirmed HomeKit states:
+
+0 = disarmed
+1 = home
+2 = away
+3 = night
+
+Home Assistant actions:
 
 alarm_control_panel.alarm_trigger
+alarm_control_panel.alarm_arm_home
 alarm_control_panel.alarm_arm_night
 alarm_control_panel.alarm_arm_away
 alarm_control_panel.alarm_disarm
 
-For a simple doorbell:
-- set volume
-- start alarm / arm action
-- delay
-- set volume to 0 or disarm
+For custom WAV sounds, prefer the local integration buttons instead of
+alarm_control_panel.
 
 
 ============================================================
-8. What NOT to do
+18. Pairing and identify
 ============================================================
 
-Do not remove volume blocks if they contain day/night logic.
-Do not change trigger sensors unless explicitly requested.
-Do not change entities between hubs unless explicitly requested.
-Do not delete snapshot scenes if they were in the original code.
-Do not convert dual-hub automations to single-hub unless explicitly requested.
+Identify uses internally:
+
+local.identify_dev
+→ basis.system/system_identify
+
+Zigbee pairing uses:
+
+miIO.zb_start_provision
+
+Observed duration:
+
+59 seconds
+
+Pairing is closed with:
+
+miIO.zb_end_provision
+
+Resource:
+
+8.0.2109
+
+is associated with the pairing window, not with volume.
 
 
 ============================================================
-9. Aqara Zigbee
+19. Local MQTT
 ============================================================
 
-If the hub has no paired Zigbee devices and you want to reduce noise near Zigbee2MQTT, you can stop:
+The internal Mosquitto broker runs on:
+
+127.0.0.1:1883
+
+The LAN tunnel is exposed on:
+
+192.168.0.100:1884
+
+Script:
+
+/data/scripts/mqtt_tunnel.sh
+
+Expected processes:
+
+nc -l -p 1884
+nc 127.0.0.1 1883
+
+The tunnel effectively supports one LAN client at a time.
+
+If the tunnel remains occupied after a Home Assistant reload:
+
+killall nc
+
+Warning:
+
+Use this command only when no active file transfer is running through nc.
+
+The tunnel script should automatically restart the required processes.
+
+
+============================================================
+20. Aqara Zigbee
+============================================================
+
+If the hub has no paired Zigbee devices and you want to reduce radio activity
+near Zigbee2MQTT, the following processes can be stopped:
 
 mzigbee_agent
 app_monitor.sh
 
-After stopping, the correct check is:
+Verification:
 
 ps w | grep mzigbee
 ps w | grep app_monitor
 
-If only grep appears, Aqara Zigbee is stopped.
+If only the grep process appears, the corresponding service is not running.
 
 Do not stop:
+
 homekitserver
 mha_basis
 mha_master
@@ -215,10 +582,10 @@ miio_client
 
 
 ============================================================
-10. Important processes
+21. Important processes
 ============================================================
 
-Check:
+Verification commands:
 
 ps w | grep telnet
 ps w | grep mzigbee
@@ -226,21 +593,132 @@ ps w | grep app_monitor
 ps w | grep homekit
 ps w | grep mha
 ps w | grep miio
+ps w | grep nc
 
-Expected result for a hub without Aqara Zigbee:
+Important processes that must be preserved:
 
-telnetd = present
-mzigbee_agent = absent
-app_monitor.sh = absent
-homekitserver -S = present
-mha_basis = present
-mha_master -b = present
-miio_client = present
+telnetd
+homekitserver -S
+mha_basis
+mha_master -b
+miio_client
+
+Stopping mha_basis can disable the hub's main functions.
+
+Do not kill or restart the main processes for testing.
 
 
 ============================================================
-11. Lux
+22. Illuminance / lux
 ============================================================
 
-A reliable local lux source was not found.
-Do not expose lux in the local integration until a real verified source exists.
+The hub sends a local raw value through MQTT:
+
+topic:
+
+zigbee/send
+
+did:
+
+lumi.0
+
+resource:
+
+0.3.85
+
+The value reacts to lighting changes, but it has not been confirmed as a
+precise physical lux measurement.
+
+It can be described as:
+
+Raw illuminance
+
+or:
+
+Raw light level
+
+It should not be presented as a calibrated and verified lux value.
+
+If exposed in Home Assistant, the name and description should clearly state
+that it is a raw value.
+
+
+============================================================
+23. BusyBox limitations on the hub
+============================================================
+
+Commands that are unavailable or should not be assumed to exist:
+
+pidof
+diff
+cmp
+strings
+nl
+ss
+tcpdump
+strace
+file
+
+Confirmed useful commands:
+
+ps
+grep
+grep -a
+ls
+cp
+ln
+nc
+od
+aplay
+killall
+
+Do not attempt to execute a WAV file directly as a shell command.
+
+
+============================================================
+24. Safety rules
+============================================================
+
+Do not stop:
+
+mha_basis
+mha_master
+homekitserver
+miio_client
+
+Do not reboot the hub for every test.
+
+Do not run simultaneously:
+
+- the MQTT tunnel through nc;
+- file transfer through the same port;
+- multiple LAN clients on the MQTT tunnel.
+
+Before running killall nc, verify that no file transfer is active.
+
+Create a backup before replacing original files.
+
+Test one modification at a time.
+
+Verify the file size after every transfer.
+
+
+============================================================
+25. Rules for modifying automations
+============================================================
+
+Do not remove volume blocks when they contain day/night logic.
+
+Do not change trigger sensors unless explicitly requested.
+
+Do not switch entities between hubs unless explicitly requested.
+
+Do not delete existing snapshot scenes.
+
+Do not convert dual-hub automations into single-hub automations unless
+explicitly requested.
+
+Do not rename entities already used in automations.
+
+For custom sounds, preserve the original filename so the Home Assistant
+entity_id remains unchanged.

@@ -1,40 +1,67 @@
-Aqara M1S - Arhitectura finala HomeKit + local + automatizari
-================================================================
+Aqara M1S – Arhitectura finală: HomeKit + integrare locală + automatizări
+========================================================================
 
 Scop:
-- sa fie clar ce face HomeKit
-- ce face integrarea locala Aqara M1S
-- ce NU trebuie controlat prin integrarea locala
-- ce am descoperit despre volum, sunet, lumina si Zigbee
+- stabilirea responsabilităților HomeKit și ale integrării locale;
+- documentarea funcțiilor confirmate;
+- evitarea comenzilor care pot bloca hubul;
+- documentarea redării sunetelor și a formatului WAV;
+- păstrarea unei arhitecturi stabile și ușor de întreținut.
 
 
 ============================================================
-1. Arhitectura stabila recomandata
+1. Arhitectura recomandată
 ============================================================
 
-HomeKit ramane pentru:
-- lumina hubului
-- culoare RGB
-- brightness
-- volum oficial
-- alarm_control_panel
-- pairing / identify
+HomeKit poate rămâne responsabil pentru:
 
-Integrarea locala Aqara M1S ramane pentru:
-- redare WAV local
-- play_url
-- butoane pentru sunetele interne
-- diagnostic Telnet
-- diagnostic procese
-- temperatura locala
-- uptime
-- IP Wi-Fi
+- alarm_control_panel;
+- armare și dezarmare;
+- stările Home, Away și Night;
+- volumul oficial al hubului;
+- lumina hubului, când automatizările existente folosesc deja entitățile HomeKit;
+- pairing și identify.
 
-Nu amesteca totul intr-o singura integrare daca HomeKit merge stabil.
+Integrarea locală Aqara M1S Local poate gestiona:
+
+- redarea sunetelor interne;
+- redarea sunetelor WAV personalizate;
+- butoanele pentru fișierele din music-ch;
+- butoanele pentru fișierele din music-us;
+- butoanele pentru fișierele din music-scene;
+- controlul volumului folosit la redarea locală;
+- controlul local al LED-ului;
+- informațiile și diagnosticarea disponibile prin Telnet;
+- senzorii locali confirmați;
+- conexiunea MQTT locală;
+- conexiunea Telnet persistentă.
+
+Nu este necesar ca toate funcțiile să fie mutate într-o singură integrare.
+
+Automatizările HomeKit existente pot rămâne neschimbate, iar integrarea
+locală poate fi folosită pentru funcțiile suplimentare.
 
 
 ============================================================
-2. Entitati HomeKit importante
+2. Versiunea actuală a integrării
+============================================================
+
+Versiune curentă:
+
+Aqara M1S Local v0.4.6
+
+Îmbunătățiri importante:
+
+- conexiune Telnet persistentă;
+- nu mai este deschisă o sesiune Telnet nouă la fiecare comandă;
+- redarea sunetelor pornește rapid;
+- reconectare automată dacă hubul închide sesiunea;
+- comenzile sunt executate serializat;
+- conexiunea este închisă curat la descărcarea integrării.
+
+
+============================================================
+3. Entități HomeKit importante
 ============================================================
 
 Hub aqarahublight:
@@ -49,30 +76,278 @@ number.aqara_hub_m1s_2653_volume
 alarm_control_panel.aqara_hub_m1s_2653_security_system
 light.aqara_hub_m1s_2653_lightbulb
 
+Nu se schimbă entitățile între huburi fără verificare.
+
 
 ============================================================
-3. Volum zi/noapte in automatizari
+4. Volumul oficial al hubului
 ============================================================
 
-Exemplu pentru volum 20 noaptea si 60 ziua:
+Volumul oficial este gestionat intern prin:
+
+basis.system/system_volume
+
+Procesul principal implicat:
+
+mha_basis
+
+Proprietatea internă asociată:
+
+persist.sys.volume
+
+În HomeKit, volumul oficial este expus prin:
+
+siid = 5
+piid = 2
+
+Entitățile Home Assistant corespunzătoare pot fi:
+
+number.aqarahublight_volume
+number.aqara_hub_m1s_2653_volume
+
+
+============================================================
+5. Volumul redării locale
+============================================================
+
+Integrarea locală expune:
+
+Sound Playback Volume
+
+Interval:
+
+1–100
+
+Valoarea este transmisă direct comenzii oficiale de redare:
+
+/bin/basis_cli -sys -s doorbell 99 0 <volum>
+
+Exemplu:
+
+/bin/basis_cli -sys -s doorbell 99 0 30
+
+Această metodă respectă volumul și folosește ruta oficială:
+
+basis_cli
+→ basis.system/system_sing
+→ mha_basis
+
+Nu se mai folosește aplay pentru redarea normală a sunetelor din integrare.
+
+aplay ocolește controlul oficial al volumului și nu trebuie folosit pentru
+butoanele principale de redare.
+
+
+============================================================
+6. Redarea sunetelor interne
+============================================================
+
+Comanda oficială confirmată:
+
+/bin/basis_cli -sys -s <tip> <index> <durată> <volum>
+
+Tipuri confirmate:
+
+alarm
+doorbell
+welcome
+
+Exemplu:
+
+/bin/basis_cli -sys -s doorbell 1 0 30
+
+Parametri:
+
+tip      = alarm, doorbell sau welcome
+index    = numărul sunetului
+durată   = 0 pentru o singură redare
+volum    = 1–100
+
+
+============================================================
+7. Redarea fișierelor WAV personalizate
+============================================================
+
+Slot rezervat integrării:
+
+/data/musics/music-scene/door_bell_99.wav
+
+Integrarea nu mai copiază fișierul WAV la fiecare redare.
+
+Folosește un link simbolic:
+
+ln -sf <fișier_sursă> \
+/data/musics/music-scene/door_bell_99.wav
+
+Apoi rulează:
+
+/bin/basis_cli -sys -s doorbell 99 0 <volum>
+
+Exemplu complet:
+
+ln -sf /data/musics/music-ch/add_sensor.wav \
+/data/musics/music-scene/door_bell_99.wav \
+&& /bin/basis_cli -sys -s doorbell 99 0 30
+
+Avantaje:
+
+- redare aproape instant;
+- fără copiere repetată a fișierelor;
+- volum controlabil;
+- toate sunetele folosesc ruta oficială mha_basis.
+
+
+============================================================
+8. Formatul WAV confirmat
+============================================================
+
+Formatul raportat de hub pentru:
+
+/data/musics/music-ch/add_sensor.wav
+
+este:
+
+format       : S32_LE
+channels     : 1
+rate         : 32000
+exact rate   : 32000
+msbits       : 32
+
+Format recomandat pentru sunetele personalizate:
+
+- WAV PCM;
+- signed 32-bit little-endian;
+- mono;
+- 32000 Hz;
+- 32 biți.
+
+Exemplu FFmpeg:
+
+ffmpeg -i input.mp3 \
+-ac 1 \
+-ar 32000 \
+-c:a pcm_s32le \
+output.wav
+
+
+============================================================
+9. Sunete personalizate instalate
+============================================================
+
+Fișier:
+
+/data/musics/music-ch/add_sensor.wav
+
+Conținut actual:
+
+Paul
+
+Entitate Home Assistant păstrată:
+
+button.aqara_m1s_local_play_ch_add_sensor_2
+
+Fișierul original a fost salvat ca:
+
+/data/musics/music-ch/add_sensor_original.wav
+
+Conținutul fișierului add_sensor_original.wav poate fi înlocuit cu:
+
+Narcisa
+
+Entitatea își păstrează numele existent, pentru a nu modifica automatizările.
+
+
+============================================================
+10. Transferul fișierelor de pe Windows
+============================================================
+
+Hubul nu oferă SSH pe portul 22.
+
+scp nu funcționează:
+
+ssh: connect to host 192.168.0.100 port 22: Connection refused
+
+Transferul se face temporar cu BusyBox nc.
+
+Pe hub:
+
+nc -l -p 12345 > /cale/destinatie/fisier.wav
+
+Exemplu:
+
+nc -l -p 12345 > \
+/data/musics/music-ch/add_sensor_original.wav
+
+Pe Windows PowerShell:
+
+$client = New-Object System.Net.Sockets.TcpClient(
+  "192.168.0.100",
+  12345
+)
+
+$stream = $client.GetStream()
+
+$bytes = [System.IO.File]::ReadAllBytes(
+  "C:\cale\fisier.wav"
+)
+
+$stream.Write($bytes, 0, $bytes.Length)
+$stream.Close()
+$client.Close()
+
+După transfer, dimensiunea trebuie verificată pe hub:
+
+ls -l /data/musics/music-ch/fisier.wav
+
+
+============================================================
+11. Backup înainte de înlocuirea unui sunet
+============================================================
+
+Înainte de înlocuirea unui fișier original:
+
+cp fisier.wav fisier_original.wav
+
+Exemplu:
+
+cp /data/musics/music-ch/add_sensor.wav \
+/data/musics/music-ch/add_sensor_original.wav
+
+Se verifică întotdeauna existența backupului înainte de suprascriere.
+
+
+============================================================
+12. Automatizări de volum zi/noapte
+============================================================
+
+Exemplu: volum 20 noaptea și 60 ziua:
 
 value: >-
-  {% if now().hour >= 21 or now().hour < 9 %} 20 {% else %} 60
+  {% if now().hour >= 21 or now().hour < 9 %}
+    20
+  {% else %}
+    60
   {% endif %}
 
-Exemplu pentru volum 5 noaptea si 25 ziua:
+Exemplu: volum 5 noaptea și 25 ziua:
 
 value: >-
-  {% if now().hour >= 21 or now().hour < 8 %} 5 {% else %} 25
+  {% if now().hour >= 21 or now().hour < 8 %}
+    5
+  {% else %}
+    25
   {% endif %}
+
+Nu se elimină blocurile de volum dacă includ logică zi/noapte.
 
 
 ============================================================
-4. Diferenta intre trigger, action si entity
+13. Trigger, action și entity
 ============================================================
 
 Trigger:
-- porneste automatizarea
+
+Pornește automatizarea.
 
 Exemplu:
 
@@ -82,23 +357,55 @@ triggers:
     to: "on"
     trigger: state
 
-Actiuni:
-- ce face automatizarea dupa trigger
-- seteaza volum
-- porneste alarma
-- aprinde lumina
-- opreste alarma
-- restaureaza scena
+Action:
 
-Entitati:
-- toate device-urile/obiectele folosite in trigger sau actions
+Reprezintă operațiile executate după trigger:
+
+- schimbarea volumului;
+- redarea unui sunet;
+- pornirea alarmei;
+- schimbarea culorii LED-ului;
+- restaurarea scenei.
+
+Entity:
+
+Dispozitivul sau obiectul Home Assistant folosit în trigger sau action.
 
 
 ============================================================
-5. Lumina rosu/verde
+14. Lumina hubului
 ============================================================
 
-O secventa simpla rosu -> verde:
+Controlul LED-ului este confirmat local prin MQTT.
+
+Topic:
+
+ioctl/recv
+
+Exemplu de payload:
+
+{
+  "cmd": "control",
+  "data": {
+    "blue": 80,
+    "breath": 500,
+    "green": 105,
+    "red": 245
+  },
+  "id": 50001,
+  "type": "rgb",
+  "ver": 1
+}
+
+Entitățile HomeKit pot fi folosite în continuare în automatizările existente:
+
+light.aqarahublight_lightbulb
+light.aqara_hub_m1s_2653_lightbulb
+
+
+============================================================
+15. Secvență lumină roșu-verde
+============================================================
 
 - continue_on_error: true
   target:
@@ -133,10 +440,10 @@ repeat:
 
 
 ============================================================
-6. Snapshot pentru lumini
+16. Snapshot pentru lumină
 ============================================================
 
-Daca vrei sa revii la starea initiala a luminii, creezi scena snapshot:
+Crearea snapshotului:
 
 - data:
     scene_id: snapshot_bec
@@ -144,71 +451,131 @@ Daca vrei sa revii la starea initiala a luminii, creezi scena snapshot:
       - light.aqarahublight_lightbulb
   action: scene.create
 
-La final:
+Restaurarea:
 
 - continue_on_error: true
   target:
     entity_id: scene.snapshot_bec
   action: scene.turn_on
 
-Pentru doua huburi:
+Pentru două huburi:
 
 snapshot_entities:
   - light.aqarahublight_lightbulb
   - light.aqara_hub_m1s_2653_lightbulb
 
+Nu se șterg scenele snapshot din automatizările existente.
+
 
 ============================================================
-7. Sunet prin alarm_control_panel
+17. Alarm control panel
 ============================================================
 
-Sunetul oficial Aqara/HomeKit merge prin:
+Entitate posibilă:
 
 alarm_control_panel.aqarahublight_security_system
 
-Actiuni utile:
+Stări HomeKit confirmate:
+
+0 = disarmed
+1 = home
+2 = away
+3 = night
+
+Acțiuni Home Assistant:
 
 alarm_control_panel.alarm_trigger
+alarm_control_panel.alarm_arm_home
 alarm_control_panel.alarm_arm_night
 alarm_control_panel.alarm_arm_away
 alarm_control_panel.alarm_disarm
 
-Pentru sonerie simpla:
-
-- setezi volumul
-- pornesti alarma / armare
-- delay
-- opresti volumul sau dezarmezi
+Pentru sunete WAV personalizate se preferă butoanele integrării locale,
+nu alarm_control_panel.
 
 
 ============================================================
-8. Ce NU trebuie facut
+18. Pairing și identify
 ============================================================
 
-Nu scoate blocuri de volum daca exista logica zi/noapte.
-Nu schimba senzorii trigger fara cerere explicita.
-Nu schimba entitatile intre huburi fara cerere explicita.
-Nu sterge scene snapshot daca erau in codul original.
-Nu transforma automatizari dual hub in single hub decat daca asta se cere.
+Identify folosește intern:
+
+local.identify_dev
+→ basis.system/system_identify
+
+Pairing Zigbee folosește:
+
+miIO.zb_start_provision
+
+cu durată observată:
+
+59 secunde
+
+Închiderea pairingului:
+
+miIO.zb_end_provision
+
+Resursa:
+
+8.0.2109
+
+este asociată ferestrei de pairing, nu volumului.
 
 
 ============================================================
-9. Zigbee Aqara
+19. MQTT local
 ============================================================
 
-Daca hubul nu are device-uri Zigbee legate si vrei sa reduci zgomotul langa Zigbee2MQTT, poti opri:
+Brokerul Mosquitto rulează intern pe:
+
+127.0.0.1:1883
+
+Tunelul LAN este expus pe:
+
+192.168.0.100:1884
+
+Script:
+
+/data/scripts/mqtt_tunnel.sh
+
+Procese așteptate:
+
+nc -l -p 1884
+nc 127.0.0.1 1883
+
+Tunelul acceptă practic un singur client LAN simultan.
+
+Dacă tunelul rămâne blocat după reload Home Assistant:
+
+killall nc
+
+Atenție:
+
+Această comandă trebuie folosită numai când nu există un transfer de fișiere
+activ prin nc.
+
+Scriptul tunelului trebuie să repornească automat procesele necesare.
+
+
+============================================================
+20. Zigbee Aqara
+============================================================
+
+Dacă hubul nu are dispozitive Zigbee asociate și se dorește reducerea
+activității radio lângă Zigbee2MQTT, pot fi oprite:
 
 mzigbee_agent
 app_monitor.sh
 
-Dupa oprire, verificarea corecta este:
+Verificare:
 
 ps w | grep mzigbee
 ps w | grep app_monitor
 
-Daca apare doar grep, Zigbee Aqara este oprit.
+Dacă apare numai procesul grep, serviciul respectiv nu rulează.
 
-Nu opri:
+Nu se opresc:
+
 homekitserver
 mha_basis
 mha_master
@@ -216,10 +583,10 @@ miio_client
 
 
 ============================================================
-10. Procese importante
+21. Procese importante
 ============================================================
 
-Verificare:
+Comenzi de verificare:
 
 ps w | grep telnet
 ps w | grep mzigbee
@@ -227,21 +594,129 @@ ps w | grep app_monitor
 ps w | grep homekit
 ps w | grep mha
 ps w | grep miio
+ps w | grep nc
 
-Rezultat dorit pentru hub fara Zigbee Aqara:
+Procese importante care trebuie păstrate:
 
-telnetd = prezent
-mzigbee_agent = absent
-app_monitor.sh = absent
-homekitserver -S = prezent
-mha_basis = prezent
-mha_master -b = prezent
-miio_client = prezent
+telnetd
+homekitserver -S
+mha_basis
+mha_master -b
+miio_client
+
+Oprirea mha_basis poate bloca funcțiile principale ale hubului.
+
+Nu se omoară și nu se repornesc procesele principale pentru teste.
 
 
 ============================================================
-11. Lux
+22. Illuminance / lux
 ============================================================
 
-Sursa locala pentru lux nu a fost gasita sigur.
-Nu expune lux in integrarea locala pana nu exista sursa reala verificata.
+Hubul trimite local o valoare brută prin MQTT:
+
+topic:
+
+zigbee/send
+
+did:
+
+lumi.0
+
+resource:
+
+0.3.85
+
+Valoarea răspunde la schimbările de lumină, dar nu este confirmată ca o
+măsurătoare fizică precisă în lux.
+
+Poate fi descrisă ca:
+
+Raw illuminance
+sau
+Raw light level
+
+Nu trebuie prezentată drept valoare calibrată și verificată în lux.
+
+Dacă este expusă în Home Assistant, numele și descrierea trebuie să precizeze
+că este o valoare brută.
+
+
+============================================================
+23. Limitări BusyBox pe hub
+============================================================
+
+Comenzi care nu sunt disponibile sau nu trebuie presupuse ca existente:
+
+pidof
+diff
+cmp
+strings
+nl
+ss
+tcpdump
+strace
+file
+
+Comenzi confirmate ca utile:
+
+ps
+grep
+grep -a
+ls
+cp
+ln
+nc
+od
+aplay
+killall
+
+Nu se încearcă executarea directă a unui fișier WAV ca o comandă shell.
+
+
+============================================================
+24. Reguli de siguranță
+============================================================
+
+Nu se opresc:
+
+mha_basis
+mha_master
+homekitserver
+miio_client
+
+Nu se repornește hubul pentru fiecare test.
+
+Nu se rulează simultan:
+
+- tunel MQTT prin nc;
+- transfer de fișiere prin același port;
+- mai mulți clienți LAN pe tunelul MQTT.
+
+Înainte de killall nc se verifică dacă există un transfer activ.
+
+Se face backup înainte de înlocuirea fișierelor originale.
+
+Se testează câte o singură modificare.
+
+Se verifică dimensiunea fișierului după transfer.
+
+
+============================================================
+25. Reguli pentru modificarea automatizărilor
+============================================================
+
+Nu se elimină blocurile de volum dacă au logică zi/noapte.
+
+Nu se schimbă senzorii trigger fără cerere explicită.
+
+Nu se schimbă entitățile între huburi fără cerere explicită.
+
+Nu se șterg scenele snapshot existente.
+
+Nu se transformă automatizările dual-hub în single-hub fără cerere explicită.
+
+Nu se redenumesc entitățile folosite deja în automatizări.
+
+Pentru sunetele personalizate se păstrează numele fișierului original,
+astfel încât entity_id-ul Home Assistant să rămână neschimbat.

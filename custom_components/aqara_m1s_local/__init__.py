@@ -106,7 +106,10 @@ async def async_setup_entry(
     )
     hass.data[DOMAIN].setdefault(
         DATA_PLAYBACK_VOLUME,
-    DATA_RADIO_PLAYERS,
+        {},
+    )
+    hass.data[DOMAIN].setdefault(
+        DATA_RADIO_PLAYERS,
         {},
     )
 

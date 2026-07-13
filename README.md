@@ -1,3 +1,13 @@
+## v0.4.4
+
+Corecție pentru `Sound Playback Volume`.
+
+- Repară `KeyError: 'playback_volume'`.
+- Inițializează starea comună indiferent de ordinea de încărcare a platformelor.
+- Butoanele folosesc implicit volumul 50 până când sliderul este restaurat.
+- Păstrează redarea tuturor WAV-urilor prin `door_bell_99.wav` și `mha_basis`.
+
+
 ## v0.4.3
 
 Această versiune mută **toate sunetele** pe ruta audio oficială

@@ -20,6 +20,7 @@ DATA_CLIENTS = "clients"
 DATA_MQTT_CLIENTS = "mqtt_clients"
 DATA_SELECTED_SOUND = "selected_sound"
 DATA_SOUND_MAP = "sound_map"
+DATA_PLAYBACK_VOLUME = "playback_volume"
 
 MQTT_TOPIC_ZIGBEE = "zigbee/send"
 MQTT_TOPIC_RGB = "ioctl/recv"

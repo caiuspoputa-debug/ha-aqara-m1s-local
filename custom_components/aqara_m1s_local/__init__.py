@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-from pathlib import PurePosixPath
-import re
 import shlex
 
-from homeassistant.components import button, light, select, sensor
+from homeassistant.components import button, light, number, select, sensor
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     CONF_HOST,
@@ -20,6 +18,7 @@ from .const import (
     CONF_MQTT_PORT,
     DATA_CLIENTS,
     DATA_MQTT_CLIENTS,
+    DATA_PLAYBACK_VOLUME,
     DATA_SELECTED_SOUND,
     DATA_SOUND_MAP,
     DEFAULT_MQTT_PORT,
@@ -36,57 +35,27 @@ from .mqtt_client import AqaraM1SMqttClient
 PLATFORMS = [
     button.DOMAIN,
     light.DOMAIN,
+    number.DOMAIN,
     sensor.DOMAIN,
     select.DOMAIN,
 ]
 
 
-def _official_scene_sound(path: str) -> tuple[str, int] | None:
-    """Map supported music-scene filenames to basis_cli parameters.
+def build_play_command(path: str, volume: int) -> str:
+    """Play any WAV through the official mha_basis audio path.
 
-    These routes are handled by mha_basis and therefore respect the hub's
-    official 1-100 volume property.
+    The selected file is copied into a reserved, recognized scene slot and
+    then played using basis_cli/system_sing. This makes Chinese, US, scene and
+    custom WAV files all respect the integration playback-volume slider.
     """
-    sound_path = PurePosixPath(path)
-    if sound_path.parent.as_posix() != "/data/musics/music-scene":
-        return None
+    safe_volume = max(1, min(100, int(volume)))
+    source = shlex.quote(path)
+    slot = "/data/musics/music-scene/door_bell_99.wav"
 
-    filename = sound_path.name
-
-    match = re.fullmatch(r"door_bell_(\d+)\.wav", filename)
-    if match:
-        return "doorbell", int(match.group(1))
-
-    match = re.fullmatch(r"welcome_(\d+)\.wav", filename)
-    if match:
-        return "welcome", int(match.group(1))
-
-    match = re.fullmatch(r"alarm_(\d+)\.wav", filename)
-    if match:
-        return "alarm", int(match.group(1))
-
-    return None
-
-
-def build_play_command(path: str) -> str:
-    """Build the safest available playback command for a WAV path.
-
-    Recognized music-scene files use the official basis.system/system_sing
-    route through mha_basis. Other files keep the previous direct ALSA
-    fallback so existing Chinese, US and miscellaneous buttons still work.
-    """
-    official = _official_scene_sound(path)
-    if official is not None:
-        sound_type, index = official
-        return (
-            'V="$(getprop persist.sys.volume)"; '
-            'case "$V" in ""|*[!0-9]*) V=50;; esac; '
-            '[ "$V" -lt 1 ] && V=1; '
-            '[ "$V" -gt 100 ] && V=100; '
-            f'/bin/basis_cli -sys -s {sound_type} {index} 0 "$V"'
-        )
-
-    return f"aplay -x 1 {shlex.quote(path)}"
+    return (
+        f"cp {source} {slot} "
+        f"&& /bin/basis_cli -sys -s doorbell 99 0 {safe_volume}"
+    )
 
 
 async def async_setup_entry(
@@ -217,7 +186,13 @@ async def async_setup_entry(
         path = call.data["path"]
         await hass.async_add_executor_job(
             selected_client.run_command,
-            build_play_command(path),
+            build_play_command(
+                path,
+                hass.data[DOMAIN][DATA_PLAYBACK_VOLUME].get(
+                    entry.entry_id,
+                    50,
+                ),
+            ),
         )
 
     async def run_command(

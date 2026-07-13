@@ -1,3 +1,61 @@
+## v0.4.3
+
+Această versiune mută **toate sunetele** pe ruta audio oficială
+`mha_basis`, inclusiv fișierele din `music-ch`, `music-us`, `music-scene`
+și sunetele personalizate.
+
+### Control nou de volum
+
+Integrarea adaugă entitatea:
+
+```text
+number.aqara_m1s_local_sound_playback_volume
+```
+
+Numele afișat este:
+
+```text
+Sound Playback Volume
+```
+
+Scala este `1–100`. Valoarea aleasă este folosită de toate butoanele de
+sunet și este restaurată după repornirea Home Assistant.
+
+### Cum funcționează
+
+La apăsarea oricărui buton:
+
+1. WAV-ul selectat este copiat temporar în slotul rezervat:
+
+   ```text
+   /data/musics/music-scene/door_bell_99.wav
+   ```
+
+2. Este redat prin:
+
+   ```text
+   /bin/basis_cli -sys -s doorbell 99 0 <volum>
+   ```
+
+3. Redarea trece prin `basis.system / system_sing` și `mha_basis`, nu prin
+   `aplay`.
+
+Prin urmare, toate sunetele respectă sliderul de volum al integrării.
+
+### Compatibilitate
+
+Sunt suportate:
+
+- toate sunetele chinezești;
+- toate sunetele americane;
+- toate sunetele `music-scene`;
+- `Play Selected Sound`;
+- WAV-uri personalizate detectate sub `/data/musics`.
+
+Slotul `door_bell_99.wav` este rezervat integrării și este suprascris la
+fiecare redare.
+
+
 ## v0.4.2
 
 This release fixes scene-sound playback so supported files use Aqara's

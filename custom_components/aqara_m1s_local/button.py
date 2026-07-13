@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN, DATA_CLIENTS, DATA_SELECTED_SOUND
-from . import build_play_command
+from . import _official_scene_sound, build_play_command
 
 
 FALLBACK_SOUNDS = [
@@ -61,7 +61,11 @@ class AqaraM1SSelectedSoundButton(ButtonEntity):
         path = self.hass.data[DOMAIN][DATA_SELECTED_SOUND].get(self.entry.entry_id)
         if not path:
             return
-        await self.hass.async_add_executor_job(self.client.run_command, build_play_command(path))
+        command = build_play_command(path)
+        await self.hass.async_add_executor_job(
+            self.client.run_command,
+            command,
+        )
 
 
 class AqaraM1SSoundButton(ButtonEntity):
@@ -72,6 +76,16 @@ class AqaraM1SSoundButton(ButtonEntity):
         self.path = path
         self._attr_name = label_for_path(path)
         self._attr_unique_id = f"{entry.entry_id}_play_{key_for_path(path)}"
+        official = _official_scene_sound(path)
+        self._attr_extra_state_attributes = {
+            "file_path": path,
+            "playback_route": (
+                "mha_basis_official"
+                if official is not None
+                else "alsa_aplay_fallback"
+            ),
+            "respects_hub_volume": official is not None,
+        }
         self._attr_device_info = {
             "identifiers": {(DOMAIN, self.client.host)},
             "name": entry.data.get("name", f"Aqara M1S {self.client.host}"),
@@ -80,4 +94,8 @@ class AqaraM1SSoundButton(ButtonEntity):
         }
 
     async def async_press(self) -> None:
-        await self.hass.async_add_executor_job(self.client.run_command, build_play_command(self.path))
+        command = build_play_command(self.path)
+        await self.hass.async_add_executor_job(
+            self.client.run_command,
+            command,
+        )

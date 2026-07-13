@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from pathlib import PurePosixPath
+import re
+import shlex
+
 from homeassistant.components import button, light, select, sensor
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
@@ -37,8 +41,52 @@ PLATFORMS = [
 ]
 
 
+def _official_scene_sound(path: str) -> tuple[str, int] | None:
+    """Map supported music-scene filenames to basis_cli parameters.
+
+    These routes are handled by mha_basis and therefore respect the hub's
+    official 1-100 volume property.
+    """
+    sound_path = PurePosixPath(path)
+    if sound_path.parent.as_posix() != "/data/musics/music-scene":
+        return None
+
+    filename = sound_path.name
+
+    match = re.fullmatch(r"door_bell_(\d+)\.wav", filename)
+    if match:
+        return "doorbell", int(match.group(1))
+
+    match = re.fullmatch(r"welcome_(\d+)\.wav", filename)
+    if match:
+        return "welcome", int(match.group(1))
+
+    match = re.fullmatch(r"alarm_(\d+)\.wav", filename)
+    if match:
+        return "alarm", int(match.group(1))
+
+    return None
+
+
 def build_play_command(path: str) -> str:
-    return f'aplay -x 1 "{path}"'
+    """Build the safest available playback command for a WAV path.
+
+    Recognized music-scene files use the official basis.system/system_sing
+    route through mha_basis. Other files keep the previous direct ALSA
+    fallback so existing Chinese, US and miscellaneous buttons still work.
+    """
+    official = _official_scene_sound(path)
+    if official is not None:
+        sound_type, index = official
+        return (
+            'V="$(getprop persist.sys.volume)"; '
+            'case "$V" in ""|*[!0-9]*) V=50;; esac; '
+            '[ "$V" -lt 1 ] && V=1; '
+            '[ "$V" -gt 100 ] && V=100; '
+            f'/bin/basis_cli -sys -s {sound_type} {index} 0 "$V"'
+        )
+
+    return f"aplay -x 1 {shlex.quote(path)}"
 
 
 async def async_setup_entry(

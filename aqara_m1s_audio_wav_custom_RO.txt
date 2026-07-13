@@ -1,57 +1,353 @@
-Aqara M1S - Audio WAV custom, arm_ok.wav si redare locala
+Aqara M1S – Audio WAV personalizat, arm_ok.wav și redare locală
 ================================================================
 
 Scop:
-- conversie MP3/WAV in format acceptat de Aqara M1S
-- testare sunet direct pe hub
-- inlocuire sunet intern arm_ok.wav
-- evitarea problemei in care aplay reda de 3 ori
-- control corect al volumului prin fisier WAV, nu prin HomeKit
+- conversia fișierelor MP3/WAV în format compatibil cu Aqara M1S;
+- testarea sunetelor direct pe hub;
+- înlocuirea unui sunet intern, precum arm_ok.wav;
+- evitarea redării multiple produse uneori de aplay;
+- redarea prin ruta oficială mha_basis;
+- controlul volumului prin integrarea locală;
+- transferul fișierelor de pe Windows sau din Home Assistant.
 
 
 ============================================================
-1. Format WAV acceptat
+1. Format WAV compatibil
 ============================================================
 
-Format recomandat pentru Aqara M1S:
+Formatul confirmat pe Aqara M1S:
 
-mono
-32000 Hz
-PCM S32_LE
+- WAV PCM;
+- mono;
+- 32000 Hz;
+- signed 32-bit little-endian;
+- codec FFmpeg: pcm_s32le.
 
-Exemplu fisier final:
+Format raportat de hub:
+
+format       : S32_LE
+channels     : 1
+rate         : 32000
+exact rate   : 32000
+msbits       : 32
+
+Exemplu de fișier final:
 
 arm_ok.wav
 
 
 ============================================================
-2. Conversie cu ffmpeg
+2. Conversie cu FFmpeg
 ============================================================
 
-Dintr-un MP3/WAV sursa, conversie in format Aqara M1S:
+Conversie standard:
 
-ffmpeg -y -i input.mp3 -ac 1 -ar 32000 -filter:a "volume=0.70" -c:a pcm_s32le arm_ok.wav
+ffmpeg -y -i input.mp3 \
+-ac 1 \
+-ar 32000 \
+-c:a pcm_s32le \
+arm_ok.wav
 
-Explicatie:
-- -ac 1 = mono
-- -ar 32000 = 32 kHz
-- volume=0.70 = volum redus la 70%
-- pcm_s32le = PCM 32-bit little-endian, acceptat de M1S
+Explicație:
 
-Pentru mai incet:
+-ac 1
+= mono
 
-volume=0.56
+-ar 32000
+= rata de eșantionare 32000 Hz
 
-Pentru mai tare:
+-c:a pcm_s32le
+= PCM semnat, 32 biți, little-endian
+
+
+============================================================
+3. Ajustarea volumului direct în WAV
+============================================================
+
+Reducerea volumului în fișier este opțională.
+
+Exemplu la 70%:
+
+ffmpeg -y -i input.mp3 \
+-ac 1 \
+-ar 32000 \
+-filter:a "volume=0.70" \
+-c:a pcm_s32le \
+arm_ok.wav
+
+Exemple:
+
+volume=0.50
+= aproximativ jumătate din amplitudine
+
+volume=0.70
+= volum moderat
 
 volume=0.80
+= volum mai ridicat
+
+Această ajustare este utilă în special când fișierul va fi redat direct cu
+aplay.
+
+Pentru redarea prin integrarea Aqara M1S Local, volumul poate fi controlat
+din entitatea:
+
+Sound Playback Volume
+
+Interval:
+
+1–100
 
 
 ============================================================
-3. Locatie HA pentru descarcare pe hub
+4. Metode de redare
 ============================================================
 
-Pune fisierul in Home Assistant:
+Există două metode diferite de redare.
+
+Metoda A – test direct cu aplay:
+
+aplay -x 1 /cale/fisier.wav
+
+Metoda B – ruta oficială Aqara:
+
+/bin/basis_cli -sys -s doorbell 99 0 <volum>
+
+Exemplu:
+
+/bin/basis_cli -sys -s doorbell 99 0 30
+
+Ruta oficială este:
+
+basis_cli
+→ basis.system/system_sing
+→ mha_basis
+
+Pentru integrarea locală se recomandă metoda B.
+
+
+============================================================
+5. Problema redării multiple cu aplay
+============================================================
+
+Pe acest firmware, comanda:
+
+aplay fisier.wav
+
+poate produce redare repetată sau comportament neclar.
+
+Pentru o singură redare se folosește:
+
+aplay -x 1 /cale/fisier.wav
+
+Exemplu:
+
+aplay -x 1 /tmp/arm_ok_new.wav
+
+aplay este recomandat pentru verificări rapide, nu pentru redarea normală
+din integrarea Home Assistant.
+
+
+============================================================
+6. Volumul și aplay
+============================================================
+
+Volumul oficial al hubului este asociat cu:
+
+basis.system/system_volume
+
+și:
+
+persist.sys.volume
+
+Entități HomeKit posibile:
+
+number.aqarahublight_volume
+number.aqara_hub_m1s_2653_volume
+
+Redarea directă cu:
+
+aplay -x 1
+
+nu respectă întotdeauna volumul oficial al hubului.
+
+Din acest motiv:
+
+- pentru aplay, volumul poate fi redus în fișierul WAV;
+- pentru integrarea locală, se folosește basis_cli;
+- integrarea locală transmite volumul direct comenzii de redare.
+
+
+============================================================
+7. Slotul de redare folosit de integrarea locală
+============================================================
+
+Slot rezervat:
+
+/data/musics/music-scene/door_bell_99.wav
+
+Integrarea creează un link simbolic către sunetul selectat:
+
+ln -sf <fișier_sursă> \
+/data/musics/music-scene/door_bell_99.wav
+
+Apoi rulează:
+
+/bin/basis_cli -sys -s doorbell 99 0 <volum>
+
+Exemplu:
+
+ln -sf /data/musics/music-ch/add_sensor.wav \
+/data/musics/music-scene/door_bell_99.wav \
+&& /bin/basis_cli -sys -s doorbell 99 0 30
+
+Avantaje:
+
+- pornire rapidă;
+- fără copierea fișierului la fiecare redare;
+- respectă volumul;
+- folosește mecanismul oficial mha_basis.
+
+
+============================================================
+8. Reducerea lagului
+============================================================
+
+Versiunile mai vechi deschideau o conexiune Telnet nouă la fiecare apăsare.
+
+Acest lucru producea întârziere.
+
+Versiunea actuală a integrării:
+
+Aqara M1S Local v0.4.6
+
+folosește:
+
+- conexiune Telnet persistentă;
+- autentificare păstrată;
+- comenzi serializate;
+- reconectare automată;
+- închiderea curată a conexiunii la unload.
+
+Rezultat:
+
+- comenzile locale pornesc aproape instant;
+- basis_cli nu mai așteaptă deschiderea unei sesiuni Telnet noi.
+
+
+============================================================
+9. Sunetele interne
+============================================================
+
+Listează toate fișierele WAV:
+
+find /data/musics -type f -name "*.wav" 2>/dev/null
+
+Directoare importante:
+
+/data/musics/music-scene/
+/data/musics/music-us/
+/data/musics/music-ch/
+
+Exemple:
+
+/data/musics/music-scene/arm_ok.wav
+/data/musics/music-scene/arm_start.wav
+/data/musics/music-scene/disarm.wav
+/data/musics/music-scene/door_bell_1.wav
+/data/musics/music-scene/alarm.wav
+/data/musics/music-ch/add_sensor.wav
+/data/musics/music-ch/add_sensor_original.wav
+
+
+============================================================
+10. Backup pentru arm_ok.wav
+============================================================
+
+Fișier original:
+
+/data/musics/music-scene/arm_ok.wav
+
+Backup, o singură dată:
+
+cd /data/musics/music-scene
+[ -f arm_ok.wav.bak ] || cp arm_ok.wav arm_ok.wav.bak
+sync
+
+Verificare:
+
+ls -l arm_ok.wav arm_ok.wav.bak
+
+
+============================================================
+11. Înlocuirea arm_ok.wav
+============================================================
+
+După ce fișierul nou a fost transferat în:
+
+/tmp/arm_ok_new.wav
+
+rulează:
+
+cp /tmp/arm_ok_new.wav \
+/data/musics/music-scene/arm_ok.wav
+
+chmod 775 \
+/data/musics/music-scene/arm_ok.wav
+
+sync
+
+Verificare:
+
+ls -l \
+/data/musics/music-scene/arm_ok.wav
+
+
+============================================================
+12. Testarea arm_ok.wav
+============================================================
+
+Test direct, o singură dată:
+
+aplay -x 1 \
+/data/musics/music-scene/arm_ok.wav
+
+Pentru verificarea formatului raportat de ALSA:
+
+aplay -v -d 1 \
+/data/musics/music-scene/arm_ok.wav \
+2>&1
+
+Se urmăresc liniile:
+
+format
+channels
+rate
+msbits
+
+
+============================================================
+13. Restaurarea sunetului original
+============================================================
+
+cd /data/musics/music-scene
+
+cp arm_ok.wav.bak arm_ok.wav
+
+chmod 775 arm_ok.wav
+
+sync
+
+Test:
+
+aplay -x 1 arm_ok.wav
+
+
+============================================================
+14. Transfer prin Home Assistant și wget
+============================================================
+
+Pune fișierul în Home Assistant:
 
 /config/www/arm_ok.wav
 
@@ -59,154 +355,313 @@ URL-ul devine:
 
 http://IP_HOME_ASSISTANT:8123/local/arm_ok.wav
 
+Exemplu, dacă Home Assistant este la 192.168.0.50:
+
+http://192.168.0.50:8123/local/arm_ok.wav
+
+Pe hub:
+
+rm -f /tmp/arm_ok_new.wav
+
+wget \
+http://192.168.0.50:8123/local/arm_ok.wav \
+-O /tmp/arm_ok_new.wav
+
+Verificare:
+
+ls -l /tmp/arm_ok_new.wav
+
+Această metodă este simplă atunci când hubul poate accesa serverul web
+Home Assistant.
+
+
+============================================================
+15. Transfer direct de pe Windows prin nc
+============================================================
+
+Hubul nu are SSH activ pe portul 22.
+
+Din acest motiv, scp produce:
+
+ssh: connect to host 192.168.0.100 port 22: Connection refused
+
+Transferul direct se poate face cu BusyBox nc.
+
+
+============================================================
+16. Pornirea receptorului pe hub
+============================================================
+
+Exemplu pentru arm_ok.wav:
+
+nc -l -p 12345 > /tmp/arm_ok_new.wav
+
+Exemplu pentru înlocuirea directă a unui sunet:
+
+nc -l -p 12345 > \
+/data/musics/music-scene/arm_ok.wav
+
+Exemplu pentru add_sensor_original.wav:
+
+nc -l -p 12345 > \
+/data/musics/music-ch/add_sensor_original.wav
+
+După rularea comenzii, terminalul Telnet rămâne în așteptare.
+
+Nu se mai scrie nimic în acea fereastră până la terminarea transferului.
+
+
+============================================================
+17. Trimiterea fișierului din PowerShell
+============================================================
+
+Exemplu generic:
+
+$client = New-Object `
+  System.Net.Sockets.TcpClient(
+    "192.168.0.100",
+    12345
+  )
+
+$stream = $client.GetStream()
+
+$bytes = [System.IO.File]::ReadAllBytes(
+  "C:\cale\fisier.wav"
+)
+
+$stream.Write(
+  $bytes,
+  0,
+  $bytes.Length
+)
+
+$stream.Close()
+$client.Close()
+
+
+============================================================
+18. Comandă PowerShell pe o singură linie
+============================================================
+
+$client = New-Object System.Net.Sockets.TcpClient("192.168.0.100",12345); $stream = $client.GetStream(); $bytes = [System.IO.File]::ReadAllBytes("C:\cale\fisier.wav"); $stream.Write($bytes,0,$bytes.Length); $stream.Close(); $client.Close()
+
+
+============================================================
+19. Exemplu real de transfer Windows
+============================================================
+
+Folder Windows folosit:
+
+C:\Users\Dell\Desktop\M1S\Sunete\Sunete modificate
+
+Exemplu pentru add_sensor_original.wav:
+
+$client = New-Object System.Net.Sockets.TcpClient("192.168.0.100",12345); $stream = $client.GetStream(); $bytes = [System.IO.File]::ReadAllBytes("C:\Users\Dell\Desktop\M1S\Sunete\Sunete modificate\add_sensor_original.wav"); $stream.Write($bytes,0,$bytes.Length); $stream.Close(); $client.Close()
+
+Destinația corespunzătoare pe hub:
+
+/data/musics/music-ch/add_sensor_original.wav
+
+
+============================================================
+20. Verificarea transferului
+============================================================
+
+După ce PowerShell revine la prompt, terminalul Telnet ar trebui să revină
+și el la:
+
+#
+
+Verifică dimensiunea:
+
+ls -l /cale/fisier.wav
+
 Exemplu:
 
-http://192.168.0.20:8123/local/arm_ok.wav
+ls -l \
+/data/musics/music-ch/add_sensor_original.wav
+
+Dimensiunea de pe hub trebuie să fie identică cu dimensiunea fișierului de pe
+Windows.
 
 
 ============================================================
-4. Descarcare pe hub pentru test
+21. Permisiuni după transfer
 ============================================================
 
-In Telnet pe hub:
+Dacă fișierul a fost creat direct cu redirecționare nc, setează permisiunile:
 
-cd /tmp
-rm -f arm_ok_new.wav
-wget http://192.168.0.20:8123/local/arm_ok.wav -O arm_ok_new.wav
-ls -l arm_ok_new.wav
+chmod 775 /cale/fisier.wav
 
+Exemplu:
 
-============================================================
-5. Testare redare o singura data
-============================================================
-
-IMPORTANT:
-Pe acest firmware, comanda simpla:
-
-aplay arm_ok_new.wav
-
-poate reda sunetul de 3 ori.
-
-Comanda corecta pentru o singura redare este:
-
-aplay -x 1 /tmp/arm_ok_new.wav
-
-
-============================================================
-6. Backup sunet original
-============================================================
-
-Sunetul intern arm_ok.wav este aici:
-
+chmod 775 \
 /data/musics/music-scene/arm_ok.wav
 
-Fa backup o singura data:
+Apoi:
 
-cd /data/musics/music-scene
-[ -f arm_ok.wav.bak ] || cp arm_ok.wav arm_ok.wav.bak
 sync
 
 
 ============================================================
-7. Inlocuire arm_ok.wav definitiv
+22. Atenție la nc și tunelul MQTT
 ============================================================
 
-Dupa ce testul din /tmp suna corect:
+Integrarea folosește și un tunel MQTT construit cu nc.
 
-cp /tmp/arm_ok_new.wav /data/musics/music-scene/arm_ok.wav
-chmod 775 /data/musics/music-scene/arm_ok.wav
+Broker intern:
+
+127.0.0.1:1883
+
+Port LAN:
+
+192.168.0.100:1884
+
+Procese posibile:
+
+nc -l -p 1884
+nc 127.0.0.1 1883
+
+Transferul fișierelor se face pe alt port, de exemplu:
+
+12345
+
+Nu folosi portul 1884 pentru transferul fișierelor.
+
+Înainte de:
+
+killall nc
+
+verifică să nu existe un transfer activ.
+
+killall nc poate opri:
+
+- transferul curent;
+- tunelul MQTT;
+- alte sesiuni nc active.
+
+
+============================================================
+23. Fișiere personalizate actuale
+============================================================
+
+Fișier:
+
+/data/musics/music-ch/add_sensor.wav
+
+Conținut personalizat:
+
+Paul
+
+Entitate Home Assistant păstrată:
+
+button.aqara_m1s_local_play_ch_add_sensor_2
+
+Fișier:
+
+/data/musics/music-ch/add_sensor_original.wav
+
+Conținut personalizat:
+
+Narcisa
+
+Numele fișierelor au fost păstrate pentru a evita schimbarea entity_id-urilor
+și a automatizărilor existente.
+
+
+============================================================
+24. Înlocuirea unui sunet fără schimbarea entității
+============================================================
+
+Pentru a păstra numele entității Home Assistant:
+
+- nu redenumi fișierul de pe hub;
+- suprascrie conținutul fișierului existent;
+- păstrează aceeași cale;
+- păstrează aceeași extensie .wav.
+
+Exemplu:
+
+/data/musics/music-ch/add_sensor.wav
+
+poate conține un sunet personalizat, dar entitatea rămâne:
+
+button.aqara_m1s_local_play_ch_add_sensor_2
+
+
+============================================================
+25. Comenzi rapide
+============================================================
+
+Conversie:
+
+ffmpeg -y -i input.mp3 -ac 1 -ar 32000 -c:a pcm_s32le output.wav
+
+Conversie cu volum redus:
+
+ffmpeg -y -i input.mp3 -ac 1 -ar 32000 -filter:a "volume=0.70" -c:a pcm_s32le output.wav
+
+Test direct:
+
+aplay -x 1 /cale/fisier.wav
+
+Test prin ruta oficială:
+
+/bin/basis_cli -sys -s doorbell 99 0 30
+
+Link pentru redare locală:
+
+ln -sf /cale/fisier.wav \
+/data/musics/music-scene/door_bell_99.wav
+
+Redare după link:
+
+/bin/basis_cli -sys -s doorbell 99 0 30
+
+Receptor transfer:
+
+nc -l -p 12345 > /cale/fisier.wav
+
+Verificare:
+
+ls -l /cale/fisier.wav
+
+Permisiuni:
+
+chmod 775 /cale/fisier.wav
+
+Salvare pe flash:
+
 sync
 
-Test final:
-
-aplay -x 1 /data/musics/music-scene/arm_ok.wav
-
 
 ============================================================
-8. Restaurare arm_ok.wav original
+26. Reguli de siguranță
 ============================================================
 
-Daca vrei sa revii la sunetul original:
+Nu opri:
 
-cd /data/musics/music-scene
-cp arm_ok.wav.bak arm_ok.wav
-chmod 775 arm_ok.wav
-sync
-aplay -x 1 arm_ok.wav
+mha_basis
+mha_master
+homekitserver
+miio_client
 
+Nu opri mha_basis pentru teste audio.
 
-============================================================
-9. Lista sunete interne
-============================================================
+Nu rula fișierul WAV direct ca pe o comandă shell.
 
-Cauta WAV-urile interne:
+Nu folosi scp, deoarece SSH nu este activ.
 
-find /data/musics -type f -name "*.wav" 2>/dev/null
+Nu folosi portul MQTT 1884 pentru transfer.
 
-Locatii importante:
+Nu executa killall nc în timpul unui transfer.
 
-/data/musics/music-scene/
-/data/musics/music-us/
-/data/musics/music-ch/
+Fă backup înainte de înlocuirea unui fișier original.
 
-Exemple utile:
+Verifică dimensiunea fișierului după fiecare transfer.
 
-/data/musics/music-scene/arm_ok.wav
-/data/musics/music-scene/arm_start.wav
-/data/musics/music-scene/disarm.wav
-/data/musics/music-scene/door_bell_1.wav
-/data/musics/music-scene/alarm.wav
+Testează o singură modificare pe rând.
 
+Folosește basis_cli pentru redarea normală din integrare.
 
-============================================================
-10. Volum
-============================================================
-
-Descoperire importanta:
-
-Volumul HomeKit / Aqara:
-
-number.aqarahublight_volume
-number.aqara_hub_m1s_2653_volume
-
-si proprietatea:
-
-persist.sys.volume
-
-NU controleaza volumul pentru redarea directa cu:
-
-aplay -x 1
-
-De aceea, pentru sunete locale redate direct, volumul trebuie redus in fisierul WAV.
-
-Solutia corecta:
-- faci WAV-ul mai incet la conversie
-- folosesti volume=0.70, 0.56 etc.
-- nu te baza pe number.volume pentru aplay
-
-
-============================================================
-11. Comenzi rapide
-============================================================
-
-Descarcare:
-
-wget http://192.168.0.20:8123/local/arm_ok.wav -O /tmp/arm_ok_new.wav
-
-Test o singura data:
-
-aplay -x 1 /tmp/arm_ok_new.wav
-
-Backup:
-
-[ -f /data/musics/music-scene/arm_ok.wav.bak ] || cp /data/musics/music-scene/arm_ok.wav /data/musics/music-scene/arm_ok.wav.bak
-
-Inlocuire:
-
-cp /tmp/arm_ok_new.wav /data/musics/music-scene/arm_ok.wav
-chmod 775 /data/musics/music-scene/arm_ok.wav
-sync
-
-Test final:
-
-aplay -x 1 /data/musics/music-scene/arm_ok.wav
+Folosește aplay -x 1 doar pentru testare directă.

@@ -1,4 +1,4 @@
-# Aqara M1S Local v0.5.6
+# Aqara M1S Local v0.5.7
 
 Maintenance release for HACS installation.
 
@@ -302,7 +302,7 @@ RGB command example:
 - The Sound Playback Volume slider is not applied to direct `aplay` sounds.
 
 
-## v0.5.6
+## v0.5.7
 
 - Custom WAV buttons use a one-shot FFmpeg pipeline for software volume.
 - Audio is played through direct `aplay`, so the Aqara LED ring is not triggered.

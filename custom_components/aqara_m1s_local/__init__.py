@@ -44,7 +44,7 @@ PLATFORMS = [
 def build_play_command(path: str, volume: int) -> str:
     """Play any WAV through the official mha_basis audio path.
 
-    The selected file is copied into a reserved, recognized scene slot and
+    The selected file is linked into a reserved, recognized scene slot and
     then played using basis_cli/system_sing. This makes Chinese, US, scene and
     custom WAV files all respect the integration playback-volume slider.
     """
@@ -53,7 +53,7 @@ def build_play_command(path: str, volume: int) -> str:
     slot = "/data/musics/music-scene/door_bell_99.wav"
 
     return (
-        f"cp {source} {slot} "
+        f"ln -sf {source} {slot} "
         f"&& /bin/basis_cli -sys -s doorbell 99 0 {safe_volume}"
     )
 

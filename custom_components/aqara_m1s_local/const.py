@@ -26,3 +26,4 @@ MQTT_TOPIC_ZIGBEE = "zigbee/send"
 MQTT_TOPIC_RGB = "ioctl/recv"
 
 DATA_RADIO_PLAYERS = "radio_players"
+DATA_SOUND_PLAYERS = "sound_players"

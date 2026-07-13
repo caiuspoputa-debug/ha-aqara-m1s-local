@@ -12,10 +12,9 @@ from .const import (
     DATA_CLIENTS,
     DATA_PLAYBACK_VOLUME,
     DATA_SELECTED_SOUND,
+    DATA_SOUND_PLAYERS,
     DOMAIN,
 )
-from . import build_play_command
-
 
 FALLBACK_SOUNDS = [
     "/data/musics/music-scene/door_bell_1.wav",
@@ -37,16 +36,14 @@ def key_for_path(path: str) -> str:
     return re.sub(r"[^a-zA-Z0-9_]+", "_", key).lower()
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback):
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
     hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN].setdefault(
-        DATA_PLAYBACK_VOLUME,
-        {},
-    )
-    hass.data[DOMAIN][DATA_PLAYBACK_VOLUME].setdefault(
-        entry.entry_id,
-        50,
-    )
+    hass.data[DOMAIN].setdefault(DATA_PLAYBACK_VOLUME, {})
+    hass.data[DOMAIN][DATA_PLAYBACK_VOLUME].setdefault(entry.entry_id, 50)
 
     client = hass.data[DOMAIN][DATA_CLIENTS][entry.entry_id]
     sounds = await hass.async_add_executor_job(client.list_sounds)
@@ -59,7 +56,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 
 
 class AqaraM1SSelectedSoundButton(ButtonEntity):
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, client):
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, client) -> None:
         self.hass = hass
         self.entry = entry
         self.client = client
@@ -76,22 +73,15 @@ class AqaraM1SSelectedSoundButton(ButtonEntity):
         path = self.hass.data[DOMAIN][DATA_SELECTED_SOUND].get(self.entry.entry_id)
         if not path:
             return
-        volume = self.hass.data.get(DOMAIN, {}).get(
-            DATA_PLAYBACK_VOLUME,
-            {},
-        ).get(
-            self.entry.entry_id,
-            50,
+        volume = self.hass.data[DOMAIN][DATA_PLAYBACK_VOLUME].get(
+            self.entry.entry_id, 50
         )
-        command = build_play_command(path, volume)
-        await self.hass.async_add_executor_job(
-            self.client.run_command,
-            command,
-        )
+        player = self.hass.data[DOMAIN][DATA_SOUND_PLAYERS][self.entry.entry_id]
+        await player.async_play(path, volume)
 
 
 class AqaraM1SSoundButton(ButtonEntity):
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, client, path: str):
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, client, path: str) -> None:
         self.hass = hass
         self.entry = entry
         self.client = client
@@ -100,8 +90,8 @@ class AqaraM1SSoundButton(ButtonEntity):
         self._attr_unique_id = f"{entry.entry_id}_play_{key_for_path(path)}"
         self._attr_extra_state_attributes = {
             "file_path": path,
-            "playback_route": "aplay_direct",
-            "respects_playback_volume": False,
+            "playback_route": "ffmpeg_to_aplay",
+            "respects_playback_volume": True,
             "light_effect": False,
         }
         self._attr_device_info = {
@@ -112,15 +102,8 @@ class AqaraM1SSoundButton(ButtonEntity):
         }
 
     async def async_press(self) -> None:
-        volume = self.hass.data.get(DOMAIN, {}).get(
-            DATA_PLAYBACK_VOLUME,
-            {},
-        ).get(
-            self.entry.entry_id,
-            50,
+        volume = self.hass.data[DOMAIN][DATA_PLAYBACK_VOLUME].get(
+            self.entry.entry_id, 50
         )
-        command = build_play_command(self.path, volume)
-        await self.hass.async_add_executor_job(
-            self.client.run_command,
-            command,
-        )
+        player = self.hass.data[DOMAIN][DATA_SOUND_PLAYERS][self.entry.entry_id]
+        await player.async_play(self.path, volume)

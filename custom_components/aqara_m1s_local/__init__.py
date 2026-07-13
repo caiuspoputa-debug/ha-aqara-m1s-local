@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import shlex
-
 from homeassistant.components import button, light, media_player, number, select, sensor
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
@@ -22,6 +20,7 @@ from .const import (
     DATA_RADIO_PLAYERS,
     DATA_SELECTED_SOUND,
     DATA_SOUND_MAP,
+    DATA_SOUND_PLAYERS,
     DEFAULT_MQTT_PORT,
     DEFAULT_PASSWORD,
     DEFAULT_PORT,
@@ -32,6 +31,7 @@ from .const import (
     SERVICE_RUN_COMMAND,
 )
 from .mqtt_client import AqaraM1SMqttClient
+from .sound_player import AqaraM1SSoundPlayer
 
 PLATFORMS = [
     button.DOMAIN,
@@ -42,28 +42,6 @@ PLATFORMS = [
     select.DOMAIN,
 ]
 
-
-def build_play_command(path: str, volume: int) -> str:
-    """Play a WAV directly with aplay, without the doorbell light effect.
-
-    The hub firmware couples the official basis_cli doorbell route to the LED
-    ring. Direct aplay playback avoids that light effect. The volume argument
-    is kept for API compatibility, but direct aplay does not use the integration
-    playback-volume slider.
-    """
-    del volume
-    source = shlex.quote(path)
-    pid_file = "/tmp/aqara_m1s_sound.pid"
-    log_file = "/tmp/aqara_m1s_sound.log"
-
-    return (
-        f"if [ -f {pid_file} ]; then "
-        f"kill $(cat {pid_file}) 2>/dev/null; "
-        f"rm -f {pid_file}; "
-        "fi; "
-        f"aplay {source} >{log_file} 2>&1 & "
-        f"echo $! > {pid_file}"
-    )
 
 
 async def async_setup_entry(
@@ -108,6 +86,7 @@ async def async_setup_entry(
     )
     hass.data[DOMAIN].setdefault(
         DATA_SOUND_MAP,
+    DATA_SOUND_PLAYERS,
         {},
     )
     hass.data[DOMAIN].setdefault(
@@ -116,6 +95,10 @@ async def async_setup_entry(
     )
     hass.data[DOMAIN].setdefault(
         DATA_RADIO_PLAYERS,
+        {},
+    )
+    hass.data[DOMAIN].setdefault(
+        DATA_SOUND_PLAYERS,
         {},
     )
 
@@ -137,6 +120,9 @@ async def async_setup_entry(
     hass.data[DOMAIN][DATA_PLAYBACK_VOLUME][
         entry.entry_id
     ] = 50
+    hass.data[DOMAIN][DATA_SOUND_PLAYERS][entry.entry_id] = AqaraM1SSoundPlayer(
+        hass, client
+    )
 
     device_registry = dr.async_get(hass)
     device_registry.async_get_or_create(
@@ -203,15 +189,10 @@ async def async_setup_entry(
     ) -> None:
         selected_client = await _get_client(call)
         path = call.data["path"]
-        await hass.async_add_executor_job(
-            selected_client.run_command,
-            build_play_command(
-                path,
-                hass.data[DOMAIN][DATA_PLAYBACK_VOLUME].get(
-                    entry.entry_id,
-                    50,
-                ),
-            ),
+        sound_player = hass.data[DOMAIN][DATA_SOUND_PLAYERS][entry.entry_id]
+        await sound_player.async_play(
+            path,
+            hass.data[DOMAIN][DATA_PLAYBACK_VOLUME].get(entry.entry_id, 50),
         )
 
     async def run_command(
@@ -267,6 +248,13 @@ async def async_unload_entry(
     )
     if radio_player:
         await radio_player.async_shutdown()
+
+    sound_player = hass.data[DOMAIN][DATA_SOUND_PLAYERS].pop(
+        entry.entry_id,
+        None,
+    )
+    if sound_player:
+        await sound_player.async_stop()
 
     telnet_client = hass.data[DOMAIN][DATA_CLIENTS].pop(
         entry.entry_id,

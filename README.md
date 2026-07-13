@@ -1,3 +1,16 @@
+## v0.5.0
+
+Adds an Aqara M1S **Radio** media player entity.
+
+- Appears as `media_player` target in Home Assistant Media Browser.
+- Resolves Home Assistant media-source items, including Radio Browser stations.
+- Streams internet radio through Home Assistant FFmpeg to the hub over local TCP.
+- Supports Play, Stop, Turn Off, Volume Set, and Mute.
+- Uses a dedicated TCP port (`12346`) and does not interfere with MQTT port `1884`.
+- Starts and stops only the dedicated radio `nc` and `aplay` processes on the hub.
+- Volume changes are applied by restarting the FFmpeg stream, causing a short reconnect gap.
+
+Home Assistant OS and Container include FFmpeg. Other installation methods must provide FFmpeg in PATH.
 ## v0.4.6
 
 Reducere suplimentară a întârzierii la comenzile Telnet.

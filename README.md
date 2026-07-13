@@ -1,70 +1,152 @@
-Aqara M1S Local
-v0.4.1
-This release fixes MQTT entity availability after startup and extends the existing integration. It does not require
+## v0.4.2
+
+This release fixes scene-sound playback so supported files use Aqara's
+official `mha_basis` audio route instead of direct `aplay`.
+
+### Official-volume scene playback
+
+The following filename patterns now respect the hub's current official
+volume (`persist.sys.volume`, 1-100):
+
+```text
+/data/musics/music-scene/door_bell_N.wav
+/data/musics/music-scene/welcome_N.wav
+/data/musics/music-scene/alarm_N.wav
+```
+
+They are played through:
+
+```text
+/bin/basis_cli -sys -s <doorbell|welcome|alarm> <index> 0 <volume>
+```
+
+This reaches `basis.system / system_sing` in `mha_basis`, which is the same
+audio path used by the hub's official volume confirmation.
+
+Examples:
+
+```text
+door_bell_1.wav -> basis_cli -sys -s doorbell 1 0 <current volume>
+welcome_4.wav   -> basis_cli -sys -s welcome 4 0 <current volume>
+alarm_3.wav     -> basis_cli -sys -s alarm 3 0 <current volume>
+```
+
+The volume is read at button-press time, so a HomeKit or Aqara volume change
+is applied immediately to the next sound.
+
+### Compatibility fallback
+
+Other files, including `music-us`, `music-ch`, and scene filenames without a
+confirmed `system_sing` mapping, continue using direct `aplay`. They remain
+functional but do not yet follow the hub's official volume.
+
+Each sound button now exposes diagnostic attributes:
+
+```text
+playback_route
+respects_hub_volume
+file_path
+```
+
+To use custom content while keeping official volume control, replace the
+contents of a supported `door_bell_N.wav`, `welcome_N.wav`, or `alarm_N.wav`
+file while keeping its recognized filename.
+
+
+# Aqara M1S Local
+
+## v0.4.1
+
+This release fixes MQTT entity availability after startup and extends the existing integration. It does **not** require
 HomeKit for the new MQTT features.
-Added
-`light.ring_light`
-On/off
-RGB color
-Brightness implemented by scaling RGB values
-Transition mapped to the hub's `breath` field
-Publishes directly to the hub topic `ioctl/recv`
-`sensor.illuminance_raw`
-Reads gateway resource `0.3.85` from `zigbee/send`
-The raw scale reacts to ambient light, but it has not yet been
-calibrated or proven to be physical lux
-Configurable MQTT tunnel port, default `1884`
-Automatic MQTT reconnect
-Wi-Fi IP parser fixed so it returns the address rather than the shell
-command text
-Existing features retained
-Telnet diagnostics
-One button per WAV under `/data/musics`
-Selected-sound playback
-Temperature, uptime, process and stored-volume sensors
-Services for WAV playback and shell commands
-Important volume status
+
+### Added
+
+- `light.ring_light`
+  - On/off
+  - RGB color
+  - Brightness implemented by scaling RGB values
+  - Transition mapped to the hub's `breath` field
+  - Publishes directly to the hub topic `ioctl/recv`
+- `sensor.illuminance_raw`
+  - Reads gateway resource `0.3.85` from `zigbee/send`
+  - The raw scale reacts to ambient light, but it has not yet been
+    calibrated or proven to be physical lux
+- Configurable MQTT tunnel port, default `1884`
+- Automatic MQTT reconnect
+- Wi-Fi IP parser fixed so it returns the address rather than the shell
+  command text
+
+### Existing features retained
+
+- Telnet diagnostics
+- One button per WAV under `/data/musics`
+- Selected-sound playback
+- Temperature, uptime, process and stored-volume sensors
+- Services for WAV playback and shell commands
+
+## Important volume status
+
 `Volume Property` remains a read-only sensor.
+
 We confirmed the official live-volume path:
+
 ```text
 set_properties: siid=5, piid=2
 -> mha_master
 -> basis.system / system_volume
 -> mha_basis
 ```
+
 However, this integration does not yet have an independent, proven and
-safe transport into that internal agent path. `setprop persist.sys.volume` only changes stored state and is not presented as a
+safe transport into that internal agent path. `setprop
+persist.sys.volume` only changes stored state and is not presented as a
 working live-volume control.
-Hub prerequisites
+
+## Hub prerequisites
+
 The hub must already provide:
-Telnet on port `23`
-The local one-client MQTT tunnel on port `1884`
-Internal Mosquitto on `127.0.0.1:1883`
-The tunnel accepts one LAN MQTT client at a time. Stop manual Paho,
+
+- Telnet on port `23`
+- The local one-client MQTT tunnel on port `1884`
+- Internal Mosquitto on `127.0.0.1:1883`
+
+The tunnel accepts **one LAN MQTT client at a time**. Stop manual Paho,
 MQTT Explorer or command-line subscribers before reloading this
 integration, otherwise Home Assistant cannot own the tunnel connection.
-Upgrade
+
+## Upgrade
+
 Copy:
+
 ```text
 custom_components/aqara_m1s_local
 ```
+
 over the existing folder, restart Home Assistant, then reload the
 integration.
+
 Existing config entries use MQTT port `1884` automatically. A new entry
 also shows the MQTT port in the setup form.
-First test
-Stop any manual subscriber connected to hub port `1884`.
-Restart Home Assistant.
-Open the Aqara M1S device.
-Test `Ring Light` with a low brightness and a simple RGB color.
-Cover and uncover the hub to verify `Illuminance Raw` changes.
-Confirmed protocol mappings
+
+## First test
+
+1. Stop any manual subscriber connected to hub port `1884`.
+2. Restart Home Assistant.
+3. Open the Aqara M1S device.
+4. Test `Ring Light` with a low brightness and a simple RGB color.
+5. Cover and uncover the hub to verify `Illuminance Raw` changes.
+
+## Confirmed protocol mappings
+
 ```text
 MQTT LED command topic: ioctl/recv
 MQTT gateway reports:   zigbee/send
 Gateway illumination:   did=lumi.0, res_name=0.3.85
 ```
+
 RGB command example:
+
 ```json
 {
   "cmd": "control",

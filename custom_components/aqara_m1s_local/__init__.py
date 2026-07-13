@@ -249,10 +249,12 @@ async def async_unload_entry(
     if mqtt_client:
         await mqtt_client.stop()
 
-    hass.data[DOMAIN][DATA_CLIENTS].pop(
+    telnet_client = hass.data[DOMAIN][DATA_CLIENTS].pop(
         entry.entry_id,
         None,
     )
+    if telnet_client:
+        await hass.async_add_executor_job(telnet_client.close)
     hass.data[DOMAIN][DATA_SELECTED_SOUND].pop(
         entry.entry_id,
         None,

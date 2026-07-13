@@ -1,3 +1,24 @@
+# Aqara M1S Local v0.5.3
+
+Maintenance release for HACS installation.
+
+## Changes
+
+- Keeps the `media_player` functionality introduced in v0.5.0.
+- Sets the integration version to `0.5.3`.
+- Enables HACS ZIP release installation with:
+  - `zip_release: true`
+  - `filename: aqara_m1s_local_v0_5_3.zip`
+- Ensures the HACS filename matches the GitHub release asset exactly.
+
+## HACS release requirements
+
+Create the GitHub release with:
+
+- Tag: `v0.5.3`
+- Asset: `aqara_m1s_local_v0_5_3.zip`
+
+
 ## v0.5.0
 
 Adds an Aqara M1S **Radio** media player entity.

@@ -79,6 +79,7 @@ class AqaraM1SSoundPlayer:
                 "-hide_banner",
                 "-loglevel",
                 "warning",
+                "-re",
                 "-i",
                 input_url,
                 "-vn",
@@ -128,6 +129,9 @@ class AqaraM1SSoundPlayer:
                 process.returncode,
                 stderr.decode(errors="ignore")[-1000:],
             )
+        elif process.returncode == 0:
+            # Let aplay drain its final buffered PCM frames before cleanup.
+            await asyncio.sleep(0.2)
         await self._remote_stop()
 
     async def async_stop(self) -> None:

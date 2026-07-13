@@ -1,23 +1,35 @@
-Aqara M1S - Custom WAV audio, arm_ok.wav and local playback
-================================================================
+Aqara M1S – Custom WAV Audio, arm_ok.wav, and Local Playback
+============================================================
 
 Purpose:
-- convert MP3/WAV into a format accepted by Aqara M1S
-- test sound directly on the hub
-- replace the internal arm_ok.wav sound
-- avoid the issue where aplay plays the sound 3 times
-- control volume correctly through the WAV file, not through HomeKit
+- convert MP3/WAV files into a format accepted by Aqara M1S;
+- test sounds directly on the hub;
+- replace an internal sound such as arm_ok.wav;
+- avoid the issue where aplay may play the sound multiple times;
+- use the official local playback route;
+- control volume correctly;
+- document file transfer methods from Windows and Home Assistant.
 
 
 ============================================================
-1. Accepted WAV format
+1. Compatible WAV format
 ============================================================
 
-Recommended format for Aqara M1S:
+Confirmed Aqara M1S format:
 
-mono
-32000 Hz
-PCM S32_LE
+- PCM WAV;
+- mono;
+- 32000 Hz;
+- signed 32-bit little-endian;
+- FFmpeg codec: pcm_s32le.
+
+Format reported by the hub:
+
+format       : S32_LE
+channels     : 1
+rate         : 32000
+exact rate   : 32000
+msbits       : 32
 
 Example final file:
 
@@ -25,30 +37,313 @@ arm_ok.wav
 
 
 ============================================================
-2. Conversion with ffmpeg
+2. Conversion with FFmpeg
 ============================================================
 
-Convert from an MP3/WAV source into Aqara M1S format:
+Standard conversion:
 
-ffmpeg -y -i input.mp3 -ac 1 -ar 32000 -filter:a "volume=0.70" -c:a pcm_s32le arm_ok.wav
+ffmpeg -y -i input.mp3 \
+-ac 1 \
+-ar 32000 \
+-c:a pcm_s32le \
+arm_ok.wav
 
 Explanation:
-- -ac 1 = mono
-- -ar 32000 = 32 kHz
-- volume=0.70 = volume reduced to 70%
-- pcm_s32le = PCM 32-bit little-endian, accepted by M1S
 
-For quieter audio:
+-ac 1
+= mono
 
-volume=0.56
+-ar 32000
+= 32000 Hz sample rate
 
-For louder audio:
-
-volume=0.80
+-c:a pcm_s32le
+= signed 32-bit little-endian PCM
 
 
 ============================================================
-3. HA location for hub download
+3. Adjusting volume inside the WAV file
+============================================================
+
+Reducing the volume inside the file is optional.
+
+Example at 70%:
+
+ffmpeg -y -i input.mp3 \
+-ac 1 \
+-ar 32000 \
+-filter:a "volume=0.70" \
+-c:a pcm_s32le \
+arm_ok.wav
+
+Examples:
+
+volume=0.50
+= approximately half amplitude
+
+volume=0.70
+= moderate volume
+
+volume=0.80
+= louder volume
+
+This is mainly useful when the file will be played directly with aplay.
+
+For playback through Aqara M1S Local, volume can be controlled with:
+
+Sound Playback Volume
+
+Range:
+
+1–100
+
+
+============================================================
+4. Playback methods
+============================================================
+
+There are two different playback methods.
+
+Method A – direct testing with aplay:
+
+aplay -x 1 /path/file.wav
+
+Method B – official Aqara playback route:
+
+/bin/basis_cli -sys -s doorbell 99 0 <volume>
+
+Example:
+
+/bin/basis_cli -sys -s doorbell 99 0 30
+
+Official route:
+
+basis_cli
+→ basis.system/system_sing
+→ mha_basis
+
+Method B is recommended for the local integration.
+
+
+============================================================
+5. Multiple playback issue with aplay
+============================================================
+
+On this firmware, the command:
+
+aplay file.wav
+
+may produce repeated playback or unclear behavior.
+
+For one playback only, use:
+
+aplay -x 1 /path/file.wav
+
+Example:
+
+aplay -x 1 /tmp/arm_ok_new.wav
+
+aplay is recommended for quick testing only, not for normal playback from
+Home Assistant.
+
+
+============================================================
+6. Volume and aplay
+============================================================
+
+The hub's official volume is associated with:
+
+basis.system/system_volume
+
+and:
+
+persist.sys.volume
+
+Possible HomeKit entities:
+
+number.aqarahublight_volume
+number.aqara_hub_m1s_2653_volume
+
+Direct playback with:
+
+aplay -x 1
+
+does not reliably follow the hub's official volume.
+
+Therefore:
+
+- reduce volume in the WAV file when using aplay;
+- use basis_cli for playback through the local integration;
+- the local integration passes the selected volume directly to the playback
+  command.
+
+
+============================================================
+7. Playback slot used by the local integration
+============================================================
+
+Reserved slot:
+
+/data/musics/music-scene/door_bell_99.wav
+
+The integration creates a symbolic link to the selected sound:
+
+ln -sf <source_file> \
+/data/musics/music-scene/door_bell_99.wav
+
+Then it runs:
+
+/bin/basis_cli -sys -s doorbell 99 0 <volume>
+
+Example:
+
+ln -sf /data/musics/music-ch/add_sensor.wav \
+/data/musics/music-scene/door_bell_99.wav \
+&& /bin/basis_cli -sys -s doorbell 99 0 30
+
+Advantages:
+
+- fast playback;
+- no repeated file copy;
+- controllable volume;
+- official playback through mha_basis.
+
+
+============================================================
+8. Reducing playback delay
+============================================================
+
+Older versions opened a new Telnet connection for every button press.
+
+This caused noticeable delay.
+
+Current integration version:
+
+Aqara M1S Local v0.4.6
+
+uses:
+
+- a persistent Telnet connection;
+- preserved authentication;
+- serialized commands;
+- automatic reconnection;
+- clean connection shutdown during unload.
+
+Result:
+
+- local commands start almost instantly;
+- basis_cli no longer waits for a new Telnet session.
+
+
+============================================================
+9. Internal sounds
+============================================================
+
+List all WAV files:
+
+find /data/musics -type f -name "*.wav" 2>/dev/null
+
+Important directories:
+
+/data/musics/music-scene/
+/data/musics/music-us/
+/data/musics/music-ch/
+
+Examples:
+
+/data/musics/music-scene/arm_ok.wav
+/data/musics/music-scene/arm_start.wav
+/data/musics/music-scene/disarm.wav
+/data/musics/music-scene/door_bell_1.wav
+/data/musics/music-scene/alarm.wav
+/data/musics/music-ch/add_sensor.wav
+/data/musics/music-ch/add_sensor_original.wav
+
+
+============================================================
+10. Backup for arm_ok.wav
+============================================================
+
+Original file:
+
+/data/musics/music-scene/arm_ok.wav
+
+Create a backup once:
+
+cd /data/musics/music-scene
+[ -f arm_ok.wav.bak ] || cp arm_ok.wav arm_ok.wav.bak
+sync
+
+Verification:
+
+ls -l arm_ok.wav arm_ok.wav.bak
+
+
+============================================================
+11. Replacing arm_ok.wav
+============================================================
+
+After the new file has been transferred to:
+
+/tmp/arm_ok_new.wav
+
+run:
+
+cp /tmp/arm_ok_new.wav \
+/data/musics/music-scene/arm_ok.wav
+
+chmod 775 \
+/data/musics/music-scene/arm_ok.wav
+
+sync
+
+Verification:
+
+ls -l \
+/data/musics/music-scene/arm_ok.wav
+
+
+============================================================
+12. Testing arm_ok.wav
+============================================================
+
+Direct one-time test:
+
+aplay -x 1 \
+/data/musics/music-scene/arm_ok.wav
+
+To inspect the ALSA format:
+
+aplay -v -d 1 \
+/data/musics/music-scene/arm_ok.wav \
+2>&1
+
+Check the lines:
+
+format
+channels
+rate
+msbits
+
+
+============================================================
+13. Restoring the original sound
+============================================================
+
+cd /data/musics/music-scene
+
+cp arm_ok.wav.bak arm_ok.wav
+
+chmod 775 arm_ok.wav
+
+sync
+
+Test:
+
+aplay -x 1 arm_ok.wav
+
+
+============================================================
+14. Transfer through Home Assistant and wget
 ============================================================
 
 Place the file in Home Assistant:
@@ -59,154 +354,312 @@ The URL becomes:
 
 http://HOME_ASSISTANT_IP:8123/local/arm_ok.wav
 
+Example, when Home Assistant is at 192.168.0.50:
+
+http://192.168.0.50:8123/local/arm_ok.wav
+
+On the hub:
+
+rm -f /tmp/arm_ok_new.wav
+
+wget \
+http://192.168.0.50:8123/local/arm_ok.wav \
+-O /tmp/arm_ok_new.wav
+
+Verification:
+
+ls -l /tmp/arm_ok_new.wav
+
+This method is convenient when the hub can access the Home Assistant web
+server.
+
+
+============================================================
+15. Direct transfer from Windows through nc
+============================================================
+
+The hub does not provide SSH on port 22.
+
+Therefore, scp fails with:
+
+ssh: connect to host 192.168.0.100 port 22: Connection refused
+
+Direct file transfer can be performed with BusyBox nc.
+
+
+============================================================
+16. Starting the receiver on the hub
+============================================================
+
+Example for arm_ok.wav:
+
+nc -l -p 12345 > /tmp/arm_ok_new.wav
+
+Example for direct replacement:
+
+nc -l -p 12345 > \
+/data/musics/music-scene/arm_ok.wav
+
+Example for add_sensor_original.wav:
+
+nc -l -p 12345 > \
+/data/musics/music-ch/add_sensor_original.wav
+
+After running the command, the Telnet terminal waits for the incoming file.
+
+Do not type anything else in that window until the transfer finishes.
+
+
+============================================================
+17. Sending the file from Windows PowerShell
+============================================================
+
+Generic example:
+
+$client = New-Object `
+  System.Net.Sockets.TcpClient(
+    "192.168.0.100",
+    12345
+  )
+
+$stream = $client.GetStream()
+
+$bytes = [System.IO.File]::ReadAllBytes(
+  "C:\path\file.wav"
+)
+
+$stream.Write(
+  $bytes,
+  0,
+  $bytes.Length
+)
+
+$stream.Close()
+$client.Close()
+
+
+============================================================
+18. One-line PowerShell command
+============================================================
+
+$client = New-Object System.Net.Sockets.TcpClient("192.168.0.100",12345); $stream = $client.GetStream(); $bytes = [System.IO.File]::ReadAllBytes("C:\path\file.wav"); $stream.Write($bytes,0,$bytes.Length); $stream.Close(); $client.Close()
+
+
+============================================================
+19. Real Windows transfer example
+============================================================
+
+Windows folder used:
+
+C:\Users\Dell\Desktop\M1S\Sunete\Sunete modificate
+
+Example for add_sensor_original.wav:
+
+$client = New-Object System.Net.Sockets.TcpClient("192.168.0.100",12345); $stream = $client.GetStream(); $bytes = [System.IO.File]::ReadAllBytes("C:\Users\Dell\Desktop\M1S\Sunete\Sunete modificate\add_sensor_original.wav"); $stream.Write($bytes,0,$bytes.Length); $stream.Close(); $client.Close()
+
+Corresponding destination on the hub:
+
+/data/musics/music-ch/add_sensor_original.wav
+
+
+============================================================
+20. Verifying the transfer
+============================================================
+
+After PowerShell returns to its prompt, the Telnet terminal should also return
+to:
+
+#
+
+Verify the size:
+
+ls -l /path/file.wav
+
 Example:
 
-http://192.168.0.20:8123/local/arm_ok.wav
+ls -l \
+/data/musics/music-ch/add_sensor_original.wav
+
+The size on the hub must match the size of the file on Windows.
 
 
 ============================================================
-4. Download to hub for testing
+21. Permissions after transfer
 ============================================================
 
-In Telnet on the hub:
+When the file is created directly through nc redirection, set permissions:
 
-cd /tmp
-rm -f arm_ok_new.wav
-wget http://192.168.0.20:8123/local/arm_ok.wav -O arm_ok_new.wav
-ls -l arm_ok_new.wav
+chmod 775 /path/file.wav
 
+Example:
 
-============================================================
-5. Test playback only once
-============================================================
-
-IMPORTANT:
-On this firmware, the simple command:
-
-aplay arm_ok_new.wav
-
-may play the sound 3 times.
-
-The correct command for one playback is:
-
-aplay -x 1 /tmp/arm_ok_new.wav
-
-
-============================================================
-6. Backup original sound
-============================================================
-
-The internal arm_ok.wav sound is here:
-
+chmod 775 \
 /data/musics/music-scene/arm_ok.wav
 
-Make a backup once:
+Then run:
 
-cd /data/musics/music-scene
-[ -f arm_ok.wav.bak ] || cp arm_ok.wav arm_ok.wav.bak
 sync
 
 
 ============================================================
-7. Replace arm_ok.wav permanently
+22. Warning about nc and the MQTT tunnel
 ============================================================
 
-After the /tmp test sounds correct:
+The integration also uses an MQTT tunnel built with nc.
 
-cp /tmp/arm_ok_new.wav /data/musics/music-scene/arm_ok.wav
-chmod 775 /data/musics/music-scene/arm_ok.wav
+Internal broker:
+
+127.0.0.1:1883
+
+LAN port:
+
+192.168.0.100:1884
+
+Possible processes:
+
+nc -l -p 1884
+nc 127.0.0.1 1883
+
+Use a different port for file transfer, for example:
+
+12345
+
+Do not use port 1884 for file transfer.
+
+Before running:
+
+killall nc
+
+verify that no file transfer is active.
+
+killall nc may stop:
+
+- the current transfer;
+- the MQTT tunnel;
+- other active nc sessions.
+
+
+============================================================
+23. Current custom files
+============================================================
+
+File:
+
+/data/musics/music-ch/add_sensor.wav
+
+Custom content:
+
+Paul
+
+Preserved Home Assistant entity:
+
+button.aqara_m1s_local_play_ch_add_sensor_2
+
+File:
+
+/data/musics/music-ch/add_sensor_original.wav
+
+Custom content:
+
+Narcisa
+
+The filenames were preserved to avoid changing existing entity IDs and
+automations.
+
+
+============================================================
+24. Replacing a sound without changing the entity
+============================================================
+
+To preserve the Home Assistant entity name:
+
+- do not rename the file on the hub;
+- overwrite the contents of the existing file;
+- keep the same path;
+- keep the .wav extension.
+
+Example:
+
+/data/musics/music-ch/add_sensor.wav
+
+may contain a custom sound while the entity remains:
+
+button.aqara_m1s_local_play_ch_add_sensor_2
+
+
+============================================================
+25. Quick commands
+============================================================
+
+Conversion:
+
+ffmpeg -y -i input.mp3 -ac 1 -ar 32000 -c:a pcm_s32le output.wav
+
+Conversion with reduced volume:
+
+ffmpeg -y -i input.mp3 -ac 1 -ar 32000 -filter:a "volume=0.70" -c:a pcm_s32le output.wav
+
+Direct test:
+
+aplay -x 1 /path/file.wav
+
+Test through the official route:
+
+/bin/basis_cli -sys -s doorbell 99 0 30
+
+Create playback link:
+
+ln -sf /path/file.wav \
+/data/musics/music-scene/door_bell_99.wav
+
+Play after linking:
+
+/bin/basis_cli -sys -s doorbell 99 0 30
+
+Start file receiver:
+
+nc -l -p 12345 > /path/file.wav
+
+Verify:
+
+ls -l /path/file.wav
+
+Set permissions:
+
+chmod 775 /path/file.wav
+
+Flush changes:
+
 sync
 
-Final test:
-
-aplay -x 1 /data/musics/music-scene/arm_ok.wav
-
 
 ============================================================
-8. Restore original arm_ok.wav
+26. Safety rules
 ============================================================
 
-To restore the original sound:
+Do not stop:
 
-cd /data/musics/music-scene
-cp arm_ok.wav.bak arm_ok.wav
-chmod 775 arm_ok.wav
-sync
-aplay -x 1 arm_ok.wav
+mha_basis
+mha_master
+homekitserver
+miio_client
 
+Do not stop mha_basis for audio testing.
 
-============================================================
-9. Internal sound list
-============================================================
+Do not execute a WAV file directly as a shell command.
 
-Find internal WAV files:
+Do not use scp because SSH is not active.
 
-find /data/musics -type f -name "*.wav" 2>/dev/null
+Do not use MQTT port 1884 for file transfers.
 
-Important locations:
+Do not run killall nc during an active transfer.
 
-/data/musics/music-scene/
-/data/musics/music-us/
-/data/musics/music-ch/
+Create a backup before replacing an original file.
 
-Useful examples:
+Verify the file size after every transfer.
 
-/data/musics/music-scene/arm_ok.wav
-/data/musics/music-scene/arm_start.wav
-/data/musics/music-scene/disarm.wav
-/data/musics/music-scene/door_bell_1.wav
-/data/musics/music-scene/alarm.wav
+Test one modification at a time.
 
+Use basis_cli for normal playback from the integration.
 
-============================================================
-10. Volume
-============================================================
-
-Important discovery:
-
-HomeKit / Aqara volume:
-
-number.aqarahublight_volume
-number.aqara_hub_m1s_2653_volume
-
-and the property:
-
-persist.sys.volume
-
-do NOT control the volume for direct playback with:
-
-aplay -x 1
-
-Therefore, for directly played local sounds, the volume must be reduced inside the WAV file.
-
-Correct solution:
-- make the WAV quieter during conversion
-- use volume=0.70, 0.56, etc.
-- do not rely on number.volume for aplay
-
-
-============================================================
-11. Quick commands
-============================================================
-
-Download:
-
-wget http://192.168.0.20:8123/local/arm_ok.wav -O /tmp/arm_ok_new.wav
-
-Test once:
-
-aplay -x 1 /tmp/arm_ok_new.wav
-
-Backup:
-
-[ -f /data/musics/music-scene/arm_ok.wav.bak ] || cp /data/musics/music-scene/arm_ok.wav /data/musics/music-scene/arm_ok.wav.bak
-
-Replace:
-
-cp /tmp/arm_ok_new.wav /data/musics/music-scene/arm_ok.wav
-chmod 775 /data/musics/music-scene/arm_ok.wav
-sync
-
-Final test:
-
-aplay -x 1 /data/musics/music-scene/arm_ok.wav
+Use aplay -x 1 only for direct testing.

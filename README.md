@@ -1,3 +1,15 @@
+## v0.4.6
+
+Reducere suplimentară a întârzierii la comenzile Telnet.
+
+- Menține o sesiune Telnet autentificată și persistentă pentru fiecare hub.
+- Nu mai reconectează și autentifică la fiecare apăsare de buton.
+- Serializează comenzile pentru a evita suprapunerea lor.
+- Se reconectează automat o dată dacă hubul închide sesiunea.
+- Închide conexiunea curat când integrarea este descărcată.
+- Păstrează redarea rapidă prin link simbolic și ruta oficială `basis_cli`.
+
+
 ## v0.4.5
 
 Corecție de performanță pentru redarea sunetelor.

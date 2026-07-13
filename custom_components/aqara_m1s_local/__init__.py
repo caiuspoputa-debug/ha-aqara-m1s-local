@@ -44,19 +44,25 @@ PLATFORMS = [
 
 
 def build_play_command(path: str, volume: int) -> str:
-    """Play any WAV through the official mha_basis audio path.
+    """Play a WAV directly with aplay, without the doorbell light effect.
 
-    The selected file is linked into a reserved, recognized scene slot and
-    then played using basis_cli/system_sing. This makes Chinese, US, scene and
-    custom WAV files all respect the integration playback-volume slider.
+    The hub firmware couples the official basis_cli doorbell route to the LED
+    ring. Direct aplay playback avoids that light effect. The volume argument
+    is kept for API compatibility, but direct aplay does not use the integration
+    playback-volume slider.
     """
-    safe_volume = max(1, min(100, int(volume)))
+    del volume
     source = shlex.quote(path)
-    slot = "/data/musics/music-scene/door_bell_99.wav"
+    pid_file = "/tmp/aqara_m1s_sound.pid"
+    log_file = "/tmp/aqara_m1s_sound.log"
 
     return (
-        f"ln -sf {source} {slot} "
-        f"&& /bin/basis_cli -sys -s doorbell 99 0 {safe_volume}"
+        f"if [ -f {pid_file} ]; then "
+        f"kill $(cat {pid_file}) 2>/dev/null; "
+        f"rm -f {pid_file}; "
+        "fi; "
+        f"aplay {source} >{log_file} 2>&1 & "
+        f"echo $! > {pid_file}"
     )
 
 

@@ -100,12 +100,9 @@ class AqaraM1SSoundButton(ButtonEntity):
         self._attr_unique_id = f"{entry.entry_id}_play_{key_for_path(path)}"
         self._attr_extra_state_attributes = {
             "file_path": path,
-            "playback_route": "mha_basis_staged_slot",
-            "respects_playback_volume": True,
-            "staging_slot": (
-                "/data/musics/music-scene/"
-                "door_bell_99.wav"
-            ),
+            "playback_route": "aplay_direct",
+            "respects_playback_volume": False,
+            "light_effect": False,
         }
         self._attr_device_info = {
             "identifiers": {(DOMAIN, self.client.host)},

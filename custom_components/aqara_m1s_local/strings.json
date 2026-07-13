@@ -3,13 +3,14 @@
     "step": {
       "user": {
         "title": "Aqara M1S Local",
-        "description": "Connect to an Aqara M1S using Telnet/root.",
+        "description": "Connect to an Aqara M1S using Telnet/root and the local MQTT tunnel.",
         "data": {
           "host": "Host",
           "port": "Port",
           "username": "Username",
           "password": "Password",
-          "name": "Name"
+          "name": "Name",
+          "mqtt_port": "MQTT tunnel port"
         }
       }
     }

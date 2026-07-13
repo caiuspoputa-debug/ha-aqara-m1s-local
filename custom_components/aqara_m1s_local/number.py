@@ -26,6 +26,12 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
+    hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN].setdefault(
+        DATA_PLAYBACK_VOLUME,
+        {},
+    )
+
     client = hass.data[DOMAIN][DATA_CLIENTS][
         entry.entry_id
     ]
@@ -117,6 +123,11 @@ class AqaraM1SSoundPlaybackVolume(
 
         value = max(1, min(100, value))
         self._attr_native_value = value
+        self.hass.data.setdefault(DOMAIN, {})
+        self.hass.data[DOMAIN].setdefault(
+            DATA_PLAYBACK_VOLUME,
+            {},
+        )
         self.hass.data[DOMAIN][
             DATA_PLAYBACK_VOLUME
         ][self.entry.entry_id] = value
@@ -131,6 +142,11 @@ class AqaraM1SSoundPlaybackVolume(
             min(100, int(round(value))),
         )
         self._attr_native_value = safe_value
+        self.hass.data.setdefault(DOMAIN, {})
+        self.hass.data[DOMAIN].setdefault(
+            DATA_PLAYBACK_VOLUME,
+            {},
+        )
         self.hass.data[DOMAIN][
             DATA_PLAYBACK_VOLUME
         ][self.entry.entry_id] = safe_value

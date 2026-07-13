@@ -102,6 +102,10 @@ async def async_setup_entry(
         DATA_SOUND_MAP,
         {},
     )
+    hass.data[DOMAIN].setdefault(
+        DATA_PLAYBACK_VOLUME,
+        {},
+    )
 
     hass.data[DOMAIN][DATA_CLIENTS][
         entry.entry_id
@@ -118,6 +122,9 @@ async def async_setup_entry(
     hass.data[DOMAIN][DATA_SOUND_MAP][
         entry.entry_id
     ] = {}
+    hass.data[DOMAIN][DATA_PLAYBACK_VOLUME][
+        entry.entry_id
+    ] = 50
 
     device_registry = dr.async_get(hass)
     device_registry.async_get_or_create(
@@ -251,6 +258,10 @@ async def async_unload_entry(
         None,
     )
     hass.data[DOMAIN][DATA_SOUND_MAP].pop(
+        entry.entry_id,
+        None,
+    )
+    hass.data[DOMAIN][DATA_PLAYBACK_VOLUME].pop(
         entry.entry_id,
         None,
     )

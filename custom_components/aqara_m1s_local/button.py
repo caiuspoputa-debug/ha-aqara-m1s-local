@@ -38,6 +38,16 @@ def key_for_path(path: str) -> str:
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback):
+    hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN].setdefault(
+        DATA_PLAYBACK_VOLUME,
+        {},
+    )
+    hass.data[DOMAIN][DATA_PLAYBACK_VOLUME].setdefault(
+        entry.entry_id,
+        50,
+    )
+
     client = hass.data[DOMAIN][DATA_CLIENTS][entry.entry_id]
     sounds = await hass.async_add_executor_job(client.list_sounds)
     if not sounds:
@@ -66,7 +76,10 @@ class AqaraM1SSelectedSoundButton(ButtonEntity):
         path = self.hass.data[DOMAIN][DATA_SELECTED_SOUND].get(self.entry.entry_id)
         if not path:
             return
-        volume = self.hass.data[DOMAIN][DATA_PLAYBACK_VOLUME].get(
+        volume = self.hass.data.get(DOMAIN, {}).get(
+            DATA_PLAYBACK_VOLUME,
+            {},
+        ).get(
             self.entry.entry_id,
             50,
         )
@@ -102,7 +115,10 @@ class AqaraM1SSoundButton(ButtonEntity):
         }
 
     async def async_press(self) -> None:
-        volume = self.hass.data[DOMAIN][DATA_PLAYBACK_VOLUME].get(
+        volume = self.hass.data.get(DOMAIN, {}).get(
+            DATA_PLAYBACK_VOLUME,
+            {},
+        ).get(
             self.entry.entry_id,
             50,
         )

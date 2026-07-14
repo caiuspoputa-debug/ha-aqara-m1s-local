@@ -1,0 +1,331 @@
+# Aqara M1S Local Radio — Media Player și auto-curățare procese audio
+
+## Scop
+
+Această configurație documentează:
+
+1. redarea unui stream radio din Home Assistant prin entitatea `media_player.aqara_m1s_local_radio`;
+2. conexiunea dintre Media Player, portul TCP `12346`, `nc` și `aplay` pe hub;
+3. curățarea automată a proceselor audio suspendate.
+
+Problema observată este că Home Assistant poate afișa în continuare starea `playing`, deși pe hub nu se mai aude nimic. Cauza identificată a fost acumularea unor procese suspendate:
+
+```text
+nc -l -p 12346
+```
+
+În rezultatul comenzii `ps`, acestea apar cu starea `T`.
+
+---
+
+## Arhitectura conexiunii audio
+
+```text
+Home Assistant
+    |
+    | media_player.play_media
+    v
+media_player.aqara_m1s_local_radio
+    |
+    | flux audio procesat de integrarea locală
+    v
+conexiune TCP către Aqara M1S, port 12346
+    |
+    v
+nc -l -p 12346
+    |
+    v
+aplay -t raw -f S32_LE -c 1 -r 32000
+    |
+    v
+ieșirea audio a hub-ului Aqara M1S
+```
+
+Entitatea Home Assistant controlează fluxul logic, dar redarea efectivă depinde de procesele locale `nc` și `aplay` de pe hub.
+
+Dacă unul dintre aceste procese rămâne suspendat, entitatea poate rămâne în starea `playing`, deși redarea reală s-a oprit.
+
+---
+
+## Pornirea radioului din Home Assistant
+
+```yaml
+alias: Hub Atelier Radio Cafe România
+description: Pornește Radio Cafe doar dacă alarma Aqara nu rulează
+
+triggers: []
+
+conditions:
+  - condition: state
+    entity_id: input_boolean.aqara_alarma_ruleaza
+    state: "off"
+
+actions:
+  - action: media_player.play_media
+    target:
+      entity_id: media_player.aqara_m1s_local_radio
+    data:
+      media_content_id: "https://live.radiocafe.ro:8443/live.aac"
+      media_content_type: music
+
+mode: restart
+```
+
+Oprire directă:
+
+```yaml
+- action: media_player.media_stop
+  target:
+    entity_id: media_player.aqara_m1s_local_radio
+```
+
+---
+
+## Suspendarea și repornirea radioului în automatizări
+
+Memorarea stării radioului:
+
+```yaml
+- variables:
+    radio_mergea: >
+      {{ is_state('media_player.aqara_m1s_local_radio', 'playing') }}
+```
+
+Oprirea radioului înaintea unei sonerii, alarme sau notificări locale:
+
+```yaml
+- if:
+    - condition: template
+      value_template: "{{ radio_mergea }}"
+  then:
+    - action: media_player.media_stop
+      continue_on_error: true
+      target:
+        entity_id: media_player.aqara_m1s_local_radio
+
+    - delay: "00:00:01"
+```
+
+Repornirea directă după eliberarea ieșirii audio:
+
+```yaml
+- if:
+    - condition: template
+      value_template: >
+        {{ radio_mergea and
+           is_state('input_boolean.aqara_alarma_ruleaza', 'off') }}
+  then:
+    - delay: "00:00:03"
+
+    - action: media_player.media_stop
+      continue_on_error: true
+      target:
+        entity_id: media_player.aqara_m1s_local_radio
+
+    - delay: "00:00:02"
+
+    - action: media_player.play_media
+      continue_on_error: true
+      target:
+        entity_id: media_player.aqara_m1s_local_radio
+      data:
+        media_content_id: "https://live.radiocafe.ro:8443/live.aac"
+        media_content_type: music
+```
+
+Oprirea suplimentară înainte de repornire forțează integrarea să recreeze fluxul audio.
+
+---
+
+## Diagnostic pe hub
+
+Verificare generală:
+
+```sh
+ps
+```
+
+Verificare listener audio:
+
+```sh
+ps | grep 12346
+```
+
+Verificare `aplay`:
+
+```sh
+ps | grep aplay
+```
+
+BusyBox-ul hub-ului poate să nu suporte `grep -E`, deci se recomandă comenzi separate.
+
+Exemplu de proces blocat:
+
+```text
+348 admin 1584 T nc -l -p 12346
+```
+
+Starea `T` indică un proces suspendat.
+
+Exemplu de procese active normale:
+
+```text
+1995 admin 1584 S nc -l -p 12346
+1996 admin 2512 S aplay -t raw -f S32_LE -c 1 -r 32000
+```
+
+Starea `S` indică un proces aflat în așteptare normală.
+
+---
+
+## Curățare manuală
+
+Procesele suspendate pot fi eliminate după PID:
+
+```sh
+kill -9 348 1940 8679
+```
+
+Nu folosi:
+
+```sh
+killall nc
+```
+
+Hub-ul utilizează și alte procese `nc`, inclusiv pentru MQTT:
+
+```text
+nc -l -p 1884
+nc 127.0.0.1 1883
+```
+
+Oprirea lor poate întrerupe comunicația MQTT și funcționarea integrării.
+
+---
+
+## Watchdog pentru auto-curățare
+
+Creează scriptul:
+
+```sh
+cat > /data/scripts/audio_cleanup.sh <<'SCRIPT'
+#!/bin/sh
+
+while true
+do
+    ps | awk '
+        $4 ~ /^T/ &&
+        $0 ~ /nc -l -p 12346/ {
+            print $1
+        }
+    ' | while read PID
+    do
+        if [ -n "$PID" ]; then
+            echo "$(date) Elimin procesul audio suspendat PID=$PID" >> /tmp/audio_cleanup.log
+            kill -9 "$PID" 2>/dev/null
+        fi
+    done
+
+    sleep 30
+done
+SCRIPT
+```
+
+Permisiuni:
+
+```sh
+chmod +x /data/scripts/audio_cleanup.sh
+```
+
+Pornire manuală:
+
+```sh
+/data/scripts/audio_cleanup.sh >/dev/null 2>&1 &
+```
+
+Verificare:
+
+```sh
+ps | grep audio_cleanup
+```
+
+Jurnal:
+
+```sh
+cat /tmp/audio_cleanup.log
+```
+
+---
+
+## Pornire automată după reboot
+
+Dacă `/data/scripts/mqtt_tunnel.sh` rulează deja la boot, adaugă:
+
+```sh
+cat >> /data/scripts/mqtt_tunnel.sh <<'SCRIPT'
+
+# Watchdog pentru procesele audio suspendate
+if ! ps | grep audio_cleanup.sh | grep -v grep >/dev/null
+then
+    /data/scripts/audio_cleanup.sh >/dev/null 2>&1 &
+fi
+SCRIPT
+```
+
+Verifică înainte să nu existe deja blocul:
+
+```sh
+grep audio_cleanup /data/scripts/mqtt_tunnel.sh
+```
+
+---
+
+## Limitări
+
+Watchdog-ul elimină procesele suspendate de pe hub, dar nu actualizează automat starea entității Home Assistant.
+
+Este posibil ca `media_player.aqara_m1s_local_radio` să rămână temporar în starea `playing` chiar dacă procesul real a fost eliminat.
+
+Integrarea ar trebui ideal să monitorizeze:
+
+- procesul FFmpeg;
+- conexiunea TCP către portul `12346`;
+- procesul `nc`;
+- procesul `aplay`;
+- codul de terminare al proceselor;
+- reconectarea după redarea unui sunet local.
+
+Entitatea Media Player ar trebui să treacă la `idle` sau `off` atunci când redarea reală s-a încheiat ori conexiunea a eșuat.
+
+---
+
+## Flux recomandat în integrare
+
+La pornire:
+
+1. se oprește sesiunea radio precedentă;
+2. se așteaptă eliberarea portului și a dispozitivului audio;
+3. se pornește listener-ul `nc`;
+4. se pornește `aplay`;
+5. se pornește fluxul FFmpeg;
+6. entitatea trece în `playing` numai după confirmarea pornirii proceselor.
+
+La oprire:
+
+1. se oprește FFmpeg;
+2. se închide conexiunea TCP;
+3. se oprește `aplay`;
+4. se elimină listener-ele audio rămase;
+5. entitatea trece în `idle`.
+
+---
+
+## Rezultat așteptat
+
+După instalarea watchdog-ului:
+
+- procesele `nc` suspendate cu starea `T` sunt eliminate automat;
+- procesele MQTT nu sunt afectate;
+- riscul ca portul audio `12346` să rămână blocat este redus;
+- redarea prin `media_player.aqara_m1s_local_radio` poate fi reluată fără restartarea hub-ului;
+- radioul poate fi oprit și repornit în jurul alarmelor, soneriilor și notificărilor locale.

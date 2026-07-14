@@ -1,0 +1,434 @@
+# Aqara M1S Local Radio — Media Player Connection and Automatic Audio Process Cleanup
+
+## Purpose
+
+This document covers two components:
+
+1. playing an internet radio stream from Home Assistant through:
+
+```text
+media_player.aqara_m1s_local_radio
+```
+
+2. automatically cleaning suspended audio processes directly on the Aqara M1S hub, specifically stale `nc` listeners on port `12346`.
+
+The observed issue is that Home Assistant may continue to display the media player as `playing`, while the hub is no longer producing audio. The identified cause was an accumulation of suspended processes such as:
+
+```text
+nc -l -p 12346
+```
+
+In the hub process list, these processes appear with state `T`.
+
+---
+
+# Audio Connection Architecture
+
+The radio path is:
+
+```text
+Home Assistant
+    |
+    | media_player.play_media
+    v
+media_player.aqara_m1s_local_radio
+    |
+    | audio stream processed by the local integration
+    v
+TCP connection to the Aqara M1S hub on port 12346
+    |
+    v
+nc -l -p 12346
+    |
+    v
+aplay -t raw -f S32_LE -c 1 -r 32000
+    |
+    v
+Aqara M1S audio output
+```
+
+The Home Assistant entity controls the logical playback state, but the actual audio output depends on the local `nc` and `aplay` processes running on the hub.
+
+If one of these processes becomes suspended or stale, the entity may remain in the `playing` state even though no sound is produced.
+
+---
+
+# Media Player Entity
+
+The media player entity used by this setup is:
+
+```text
+media_player.aqara_m1s_local_radio
+```
+
+Example: start radio playback directly:
+
+```yaml
+action: media_player.play_media
+target:
+  entity_id: media_player.aqara_m1s_local_radio
+data:
+  media_content_id: "https://live.radiocafe.ro:8443/live.aac"
+  media_content_type: music
+```
+
+Example: stop playback:
+
+```yaml
+action: media_player.media_stop
+target:
+  entity_id: media_player.aqara_m1s_local_radio
+```
+
+---
+
+# Home Assistant Automation for Starting the Radio
+
+```yaml
+alias: Aqara Workshop Radio Cafe Romania
+description: Starts Radio Cafe only when the Aqara alarm is not running
+
+triggers: []
+
+conditions:
+  - condition: state
+    entity_id: input_boolean.aqara_alarma_ruleaza
+    state: "off"
+
+actions:
+  - action: media_player.play_media
+    target:
+      entity_id: media_player.aqara_m1s_local_radio
+    data:
+      media_content_id: "https://live.radiocafe.ro:8443/live.aac"
+      media_content_type: music
+
+mode: restart
+```
+
+This automation can be triggered manually from the dashboard or called from other automations.
+
+---
+
+# Temporarily Suspending the Radio
+
+Before playing a doorbell, alarm, or local notification, store whether the radio was active:
+
+```yaml
+- variables:
+    radio_was_playing: >
+      {{ is_state('media_player.aqara_m1s_local_radio', 'playing') }}
+```
+
+Stop the radio only if it was playing:
+
+```yaml
+- if:
+    - condition: template
+      value_template: "{{ radio_was_playing }}"
+  then:
+    - action: media_player.media_stop
+      continue_on_error: true
+      target:
+        entity_id: media_player.aqara_m1s_local_radio
+
+    - delay: "00:00:01"
+```
+
+Restart it after the local audio path has been released:
+
+```yaml
+- if:
+    - condition: template
+      value_template: >
+        {{ radio_was_playing and
+           is_state('input_boolean.aqara_alarma_ruleaza', 'off') }}
+  then:
+    - delay: "00:00:03"
+
+    - action: media_player.media_stop
+      continue_on_error: true
+      target:
+        entity_id: media_player.aqara_m1s_local_radio
+
+    - delay: "00:00:02"
+
+    - action: media_player.play_media
+      continue_on_error: true
+      target:
+        entity_id: media_player.aqara_m1s_local_radio
+      data:
+        media_content_id: "https://live.radiocafe.ro:8443/live.aac"
+        media_content_type: music
+```
+
+The extra stop before restarting forces the integration to recreate the audio session.
+
+---
+
+# Hub Diagnostics
+
+Connect to the Aqara hub through Telnet and inspect the process list:
+
+```sh
+ps
+```
+
+Check processes related to the audio port:
+
+```sh
+ps | grep 12346
+```
+
+Check the `aplay` process:
+
+```sh
+ps | grep aplay
+```
+
+The BusyBox version on the hub may not support:
+
+```sh
+grep -E
+```
+
+Use separate `grep` commands instead.
+
+Example of suspended processes:
+
+```text
+348 admin 1584 T nc -l -p 12346
+1940 admin 1584 T nc -l -p 12346
+8679 admin 1584 T nc -l -p 12346
+```
+
+The `T` state means the process is stopped or suspended.
+
+A normal active audio session may look like:
+
+```text
+1995 admin 1584 S nc -l -p 12346
+1996 admin 2512 S aplay -t raw -f S32_LE -c 1 -r 32000
+```
+
+The `S` state is normal sleeping or waiting behavior.
+
+---
+
+# Manual Cleanup
+
+Suspended processes can be terminated using their individual PIDs:
+
+```sh
+kill -9 348 1940 8679
+```
+
+Do not use:
+
+```sh
+killall nc
+```
+
+The hub also uses `nc` for MQTT-related services:
+
+```text
+nc -l -p 1884
+nc 127.0.0.1 1883
+```
+
+Killing all `nc` processes can interrupt MQTT communication and break the integration.
+
+---
+
+# Automatic Cleanup Watchdog
+
+Create the watchdog script:
+
+```sh
+cat > /data/scripts/audio_cleanup.sh <<'EOF'
+#!/bin/sh
+
+while true
+do
+    ps | awk '
+        $4 ~ /^T/ &&
+        $0 ~ /nc -l -p 12346/ {
+            print $1
+        }
+    ' | while read PID
+    do
+        if [ -n "$PID" ]; then
+            echo "$(date) Removing suspended audio process PID=$PID" >> /tmp/audio_cleanup.log
+            kill -9 "$PID" 2>/dev/null
+        fi
+    done
+
+    sleep 30
+done
+EOF
+```
+
+Make it executable:
+
+```sh
+chmod +x /data/scripts/audio_cleanup.sh
+```
+
+Start it manually:
+
+```sh
+/data/scripts/audio_cleanup.sh >/dev/null 2>&1 &
+```
+
+Verify that it is running:
+
+```sh
+ps | grep audio_cleanup
+```
+
+Read the cleanup log:
+
+```sh
+cat /tmp/audio_cleanup.log
+```
+
+---
+
+# Automatic Startup After Reboot
+
+If `/data/scripts/mqtt_tunnel.sh` already starts automatically during boot, the watchdog can be launched from that script:
+
+```sh
+cat >> /data/scripts/mqtt_tunnel.sh <<'EOF'
+
+# Watchdog for suspended audio processes
+if ! ps | grep audio_cleanup.sh | grep -v grep >/dev/null
+then
+    /data/scripts/audio_cleanup.sh >/dev/null 2>&1 &
+fi
+EOF
+```
+
+Before appending the block, verify that it has not already been added:
+
+```sh
+grep audio_cleanup /data/scripts/mqtt_tunnel.sh
+```
+
+---
+
+# Optional Extended Version With Orphaned `aplay` Cleanup
+
+The following version removes suspended `nc` listeners and also stops an orphaned `aplay` process when no active listener remains on port `12346`.
+
+```sh
+cat > /data/scripts/audio_cleanup.sh <<'EOF'
+#!/bin/sh
+
+LOG="/tmp/audio_cleanup.log"
+
+while true
+do
+    ps | awk '
+        $4 ~ /^T/ &&
+        $0 ~ /nc -l -p 12346/ {
+            print $1
+        }
+    ' | while read PID
+    do
+        if [ -n "$PID" ]; then
+            echo "$(date) Removing suspended nc process PID=$PID" >> "$LOG"
+            kill -9 "$PID" 2>/dev/null
+        fi
+    done
+
+    ACTIVE_NC="$(ps | awk '$4 !~ /^T/ && $0 ~ /nc -l -p 12346/ { print $1; exit }')"
+    APLAY_PID="$(ps | awk '$0 ~ /aplay/ && $0 !~ /awk/ { print $1; exit }')"
+
+    if [ -z "$ACTIVE_NC" ] && [ -n "$APLAY_PID" ]; then
+        echo "$(date) Removing orphaned aplay process PID=$APLAY_PID" >> "$LOG"
+        kill -9 "$APLAY_PID" 2>/dev/null
+    fi
+
+    sleep 30
+done
+EOF
+```
+
+This version is more aggressive and should be tested before permanent use.
+
+---
+
+# Known Limitation
+
+The watchdog cleans up suspended processes on the hub, but it does not automatically correct the Home Assistant entity state.
+
+The entity:
+
+```text
+media_player.aqara_m1s_local_radio
+```
+
+may temporarily remain:
+
+```text
+playing
+```
+
+even after the real audio process has stopped.
+
+Ideally, the integration should monitor the actual audio process or TCP connection and set the entity state to:
+
+```text
+idle
+```
+
+or:
+
+```text
+off
+```
+
+when playback ends or the connection fails.
+
+---
+
+# Recommended Integration Behavior
+
+The Media Player implementation should track these separately:
+
+- the playback state requested by Home Assistant;
+- the real audio process state;
+- the TCP connection state to port `12346`;
+- the FFmpeg exit status;
+- the `aplay` process state;
+- reconnection after local doorbell or alarm sounds.
+
+Recommended startup sequence:
+
+1. stop any previous radio session;
+2. wait for the audio port and audio device to be released;
+3. start the `nc` listener;
+4. start `aplay`;
+5. start the FFmpeg stream;
+6. set the entity to `playing` only after the required processes are confirmed alive.
+
+Recommended stop sequence:
+
+1. stop FFmpeg;
+2. close the TCP connection;
+3. stop `aplay`;
+4. remove any stale audio listeners;
+5. set the entity to `idle`.
+
+---
+
+# Expected Result
+
+After installing the watchdog:
+
+- suspended `nc` processes in state `T` are removed automatically;
+- MQTT-related `nc` processes are not affected;
+- the risk of port `12346` remaining blocked is reduced;
+- playback through `media_player.aqara_m1s_local_radio` can recover without rebooting the hub;
+- Home Assistant automations can stop and restart the radio around alarms, doorbells, and local notification sounds.

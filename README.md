@@ -1,23 +1,60 @@
-# Aqara M1S Local v0.5.8
+# Aqara M1S Local v0.5.9
 
-Maintenance release for HACS installation.
+Integrare locală Home Assistant pentru huburile Aqara M1S compatibile, cu control prin Telnet și MQTT local.
 
-## Changes
+## v0.5.9
 
-- Keeps the `media_player` functionality introduced in v0.5.0.
-- Sets the integration version to `0.5.3`.
-- Enables HACS ZIP release installation with:
-  - `zip_release: true`
-  - `filename: aqara_m1s_local_v0_5_3.zip`
-- Ensures the HACS filename matches the GitHub release asset exactly.
+Această versiune păstrează toate funcțiile din v0.5.8 și corectează oprirea și repornirea fluxului radio local.
 
-## HACS release requirements
+### Corecție radio
 
-Create the GitHub release with:
+Procesele dedicate radioului sunt acum oprite forțat înainte de pornirea unui flux nou:
 
-- Tag: `v0.5.5`
-- Asset: `aqara_m1s_local_v0_5_3.zip`
+```sh
+for f in /tmp/aqara_m1s_radio_nc.pid /tmp/aqara_m1s_radio_aplay.pid; do
+  [ -f "$f" ] && kill -9 "$(cat "$f")" 2>/dev/null
+done
+```
 
+Sunt șterse apoi fișierele PID și FIFO rămase:
+
+```sh
+rm -f /tmp/aqara_m1s_radio_nc.pid \
+      /tmp/aqara_m1s_radio_aplay.pid \
+      /tmp/aqara_m1s_radio_fifo
+```
+
+La pornire, atât `nc`, cât și `aplay` au intrarea standard decuplată prin `</dev/null`:
+
+```sh
+nc -l -p 12346 </dev/null > /tmp/aqara_m1s_radio_fifo \
+  2>/tmp/aqara_m1s_radio_nc.log &
+
+aplay -t raw -f S32_LE -c 1 -r 32000 \
+  /tmp/aqara_m1s_radio_fifo </dev/null \
+  >/tmp/aqara_m1s_radio_aplay.log 2>&1 &
+```
+
+Modificarea previne blocarea proceselor vechi `nc` sau `aplay` și face comenzile **Play**, **Stop**, **Turn Off** și schimbarea postului mai fiabile.
+
+### Fișiere și porturi folosite de radio
+
+- Port TCP radio: `12346`
+- FIFO: `/tmp/aqara_m1s_radio_fifo`
+- PID `nc`: `/tmp/aqara_m1s_radio_nc.pid`
+- PID `aplay`: `/tmp/aqara_m1s_radio_aplay.pid`
+- Log `nc`: `/tmp/aqara_m1s_radio_nc.log`
+- Log `aplay`: `/tmp/aqara_m1s_radio_aplay.log`
+
+### Instalare HACS / GitHub Release
+
+Pentru această versiune, release-ul GitHub trebuie creat astfel:
+
+- Tag: `v0.5.9`
+- Asset ZIP: `aqara_m1s_local_v0_5_9.zip`
+- Versiune în `manifest.json`: `0.5.9`
+
+După actualizare, repornește Home Assistant sau reîncarcă integrarea.
 
 ## v0.5.0
 
@@ -308,3 +345,8 @@ RGB command example:
 - Audio is played through direct `aplay`, so the Aqara LED ring is not triggered.
 - A dedicated source/sink pair prevents overlapping playback paths.
 - The Sound Playback Volume slider is applied before PCM reaches the hub.
+
+## v0.5.9
+
+- Radio: procesele remote `nc` și `aplay` pornesc cu stdin decuplat de sesiunea Telnet.
+- Radio: procesele rămase sunt oprite forțat cu `kill -9` înainte de recrearea FIFO-ului.

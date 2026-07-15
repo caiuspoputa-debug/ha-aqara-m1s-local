@@ -32,7 +32,7 @@ REMOTE_APLAY_PID = "/tmp/aqara_m1s_radio_aplay.pid"
 
 REMOTE_STOP_COMMAND = (
     f'for f in {REMOTE_NC_PID} {REMOTE_APLAY_PID}; do '
-    '[ -f "$f" ] && kill "$(cat "$f")" 2>/dev/null; '
+    '[ -f "$f" ] && kill -9 "$(cat "$f")" 2>/dev/null; '
     'done; '
     f'rm -f {REMOTE_NC_PID} {REMOTE_APLAY_PID} {REMOTE_FIFO}'
 )
@@ -40,10 +40,11 @@ REMOTE_STOP_COMMAND = (
 REMOTE_START_COMMAND = (
     REMOTE_STOP_COMMAND
     + f'; mkfifo {REMOTE_FIFO}; '
-    + f'nc -l -p {RADIO_PORT} > {REMOTE_FIFO} '
+    + f'nc -l -p {RADIO_PORT} </dev/null > {REMOTE_FIFO} '
       '2>/tmp/aqara_m1s_radio_nc.log & '
     + f'echo $! > {REMOTE_NC_PID}; '
-    + f'aplay -t raw -f S32_LE -c 1 -r 32000 {REMOTE_FIFO} '
+    + f'aplay -t raw -f S32_LE -c 1 -r 32000 '
+      f'{REMOTE_FIFO} </dev/null '
       '>/tmp/aqara_m1s_radio_aplay.log 2>&1 & '
     + f'echo $! > {REMOTE_APLAY_PID}'
 )

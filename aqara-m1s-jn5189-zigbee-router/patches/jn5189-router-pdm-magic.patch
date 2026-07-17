@@ -1,0 +1,32 @@
+--- a/source/Router/Source/Common/app_common.h
++++ b/source/Router/Source/Common/app_common.h
+@@
+ typedef struct
+ {
++    uint32_t       u32Magic;
+     teNodeState    eNodeState;
+     teNodeState    eNodePrevState;
+ } tsDeviceDesc;
+
+--- a/source/Router/Source/app_router_node.c
++++ b/source/Router/Source/app_router_node.c
+@@
+-    sDeviceDesc.eNodeState = E_STARTUP;
++    sDeviceDesc.u32Magic = 0;
++    sDeviceDesc.eNodeState = E_STARTUP;
++    sDeviceDesc.eNodePrevState = E_STARTUP;
+     PDM_eReadDataFromRecord(PDM_ID_APP_ROUTER,
+                             &sDeviceDesc,
+                             sizeof(tsDeviceDesc),
+                             &u16ByteRead);
++
++    if (sDeviceDesc.u32Magic != 0x52545231UL)
++    {
++        PDM_vDeleteAllDataRecords();
++        sDeviceDesc.u32Magic = 0x52545231UL;
++        sDeviceDesc.eNodeState = E_STARTUP;
++        sDeviceDesc.eNodePrevState = E_STARTUP;
++        PDM_eSaveRecordData(PDM_ID_APP_ROUTER,
++                            &sDeviceDesc,
++                            sizeof(tsDeviceDesc));
++    }

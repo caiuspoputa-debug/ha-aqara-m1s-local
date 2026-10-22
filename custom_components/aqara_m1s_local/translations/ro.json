@@ -1,0 +1,34 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Aqara M1S Stock Lab",
+        "description": "Foloseste accesul Telnet autorizat si tunelul MQTT stock deja existente. Nu activeaza acces, nu instaleaza tuneluri si nu modifica firmware. Nu conecta ZoH/ZHA/Zigbee2MQTT la UART-ul coordonatorului stock.",
+        "data": {
+          "host": "IP sau nume de retea al hubului",
+          "port": "Port Telnet existent",
+          "username": "Utilizator",
+          "password": "Parola",
+          "name": "Nume",
+          "mqtt_port": "Port tunel MQTT stock existent"
+        }
+      }
+    },
+    "abort": {"already_configured": "Acest hub este deja configurat"},
+    "error": {"invalid_input": "Verifica adresa, porturile si autentificarea. Nu sunt acceptate URL-uri sau caractere de control."}
+  },
+  "options": {
+    "error": {"invalid_input": "Verifica limitele numerice si optiunile."},
+    "step": {
+      "init": {
+        "title": "Limite stock lab",
+        "description": "Pe .109 au fost testate fizic numai volumele native 1..5. Cresterea limitei poate produce sunet puternic si ramane nevalidata. Controlul copiilor este experimental: necesita aceasta optiune si activarea entitatii switch. Reconectarea nu retrimite comenzi.",
+        "data": {
+          "native_audio_limit": "Volum maxim pentru cererea de sunet nativ (%)",
+          "allow_child_control": "Permite comenzi catre switch-uri copil mapate (experimental)",
+          "stale_seconds": "Vechimea maxima a raportului copilului (secunde)"
+        }
+      }
+    }
+  }
+}

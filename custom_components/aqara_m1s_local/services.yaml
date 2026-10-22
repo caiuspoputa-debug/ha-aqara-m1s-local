@@ -1,68 +1,49 @@
-play_url:
-  name: Play URL
-  description: Download a WAV URL to /tmp and play it on the Aqara M1S.
-  fields:
-    host:
-      name: Host
-      required: false
-      selector:
-        text:
-    port:
-      name: Port
-      required: false
-      default: 23
-      selector:
-        number:
-          min: 1
-          max: 65535
-    url:
-      name: URL
-      required: true
-      selector:
-        text:
-
 play_sound:
-  name: Play Sound
-  description: Play a WAV file already present on the Aqara M1S filesystem.
+  name: Play native stock sound
+  description: >
+    Request one local doorbell/1 playback through ha_basis. RPC acceptance is
+    not playback completion. No WAV upload, FFmpeg, automatic retry or ring restore.
+    Only catalog id 1 is lab-validated. Stock lab volume was tested at 1..5 percent.
   fields:
-    host:
-      name: Host
-      required: false
+    entry_id:
+      name: Config entry
+      description: Required when more than one M1S is configured, unless host is supplied.
       selector:
         text:
-    port:
-      name: Port
-      required: false
-      default: 23
+    host:
+      name: Configured hub host
+      selector:
+        text:
+    sound_id:
+      name: Validated native catalog id
+      default: 1
       selector:
         number:
           min: 1
-          max: 65535
-    path:
-      name: Path
-      required: true
-      selector:
-        text:
-
-run_command:
-  name: Run Command
-  description: Run a shell command on the Aqara M1S over Telnet.
-  fields:
-    host:
-      name: Host
-      required: false
-      selector:
-        text:
-    port:
-      name: Port
-      required: false
-      default: 23
+          max: 1
+          mode: box
+    volume:
+      name: Per-request volume
+      description: Must not exceed the configured native audio limit. Does not set global volume.
       selector:
         number:
           min: 1
-          max: 65535
-    command:
-      name: Command
-      required: true
+          max: 100
+          mode: box
+    sound_path:
+      name: Legacy path compatibility
+      description: Only /data/musics/music-scene/door_bell_1.wav is mapped to native catalog id 1.
+      selector:
+        text:
+refresh_inventory:
+  name: Refresh stock inventory
+  description: Read device.info again. Does not pair, delete or reset any Zigbee device.
+  fields:
+    entry_id:
+      name: Config entry
+      selector:
+        text:
+    host:
+      name: Configured hub host
       selector:
         text:

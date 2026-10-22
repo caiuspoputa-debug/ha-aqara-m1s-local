@@ -1,0 +1,18 @@
+{
+  "built_at_utc": "2026-10-22T20:29:25.588486+00:00",
+  "python": "3.12.14",
+  "schema_library": "probatio==0.13.0",
+  "tests_run": 63,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "passed": true,
+  "syntax_files_checked": 23,
+  "json_files_checked": 5,
+  "lint": "ruff check and format --check passed",
+  "test_kind": "synthetic protocol/runtime tests, localhost MQTT server, HA API test doubles",
+  "real_home_assistant_boot": false,
+  "physical_hub_test_this_build": false,
+  "ha_installation_or_restart": false,
+  "github_publication": false
+}

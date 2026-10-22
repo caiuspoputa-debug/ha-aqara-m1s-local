@@ -1,0 +1,157 @@
+{
+  "version": "0.6.0",
+  "release": "STOCK_LAB_TEST",
+  "private": true,
+  "publication": "not_authorized",
+  "files": {
+    "CAPABILITATI.md": {
+      "sha256": "e8f2e9cb588490ba582339fff2da4d51599a10dedd710bee9cc90284324b907a",
+      "bytes": 3587
+    },
+    "CHANGELOG.md": {
+      "sha256": "163b285a1c67ca82588b5defbd1ed7cde692cf2a6a779fc2992f5c5ff4d96288",
+      "bytes": 793
+    },
+    "custom_components/aqara_m1s_local/__init__.py": {
+      "sha256": "54bfeca68a5036a79dc89415b7fe61a5630932ce90212e824b29bfa320073628",
+      "bytes": 4778
+    },
+    "custom_components/aqara_m1s_local/binary_sensor.py": {
+      "sha256": "b9db2bc8b7c294597d536775e4e2c8b541d4869e2bb88a56784561b074f796d7",
+      "bytes": 3012
+    },
+    "custom_components/aqara_m1s_local/button.py": {
+      "sha256": "5e3cb825001135954f53f3dc4eb542c23b8029f34001071cd3f6fbf82e618d28",
+      "bytes": 1510
+    },
+    "custom_components/aqara_m1s_local/client.py": {
+      "sha256": "21b2a731f69c0b94a5c77335f1903c5d4c2b2806edfa8d4899b1ce39c8a931a8",
+      "bytes": 6289
+    },
+    "custom_components/aqara_m1s_local/config_flow.py": {
+      "sha256": "60def1508d14985980330bc74c03c5f9af703349a31152cc0214f85cc34333b3",
+      "bytes": 3861
+    },
+    "custom_components/aqara_m1s_local/const.py": {
+      "sha256": "6aae3fcd5306d7470c69e14ca4fd56a49d7ff2bc467e11130f392fe73cc380f4",
+      "bytes": 404
+    },
+    "custom_components/aqara_m1s_local/diagnostics.py": {
+      "sha256": "b4cd2a689e89a4f045925ade5bc840da5e9f4cf9c101e73a25757116a334bce5",
+      "bytes": 170
+    },
+    "custom_components/aqara_m1s_local/entity.py": {
+      "sha256": "9aae55f8af8b5d139ca4c817a7e3e325e563749d1e84d38bebb12e899eaa9cbe",
+      "bytes": 4611
+    },
+    "custom_components/aqara_m1s_local/event.py": {
+      "sha256": "31fb5157dbe95ff7f9e43d56fd8a62b0008e4417324a215dc673e58708aa8da5",
+      "bytes": 1373
+    },
+    "custom_components/aqara_m1s_local/light.py": {
+      "sha256": "6d242e94ec19313084b83f00f91b36d8034e06f42b43dc13455a55ab088a8c9d",
+      "bytes": 2174
+    },
+    "custom_components/aqara_m1s_local/manifest.json": {
+      "sha256": "b2f6ab07dc91c575c0f47bb6c95461d33e4bb19bdbfdd7df07a6ebab1fec6557",
+      "bytes": 399
+    },
+    "custom_components/aqara_m1s_local/mqtt_client.py": {
+      "sha256": "fb8fcb2fcb2d53c86c057a9541b309ba17f3e7b944d5a835ce52182da19adcc8",
+      "bytes": 8901
+    },
+    "custom_components/aqara_m1s_local/number.py": {
+      "sha256": "697264a91b3df5b546e518c058d11b27183bc288f0a29799bb1bc37c5448cd0f",
+      "bytes": 2022
+    },
+    "custom_components/aqara_m1s_local/runtime.py": {
+      "sha256": "47fd9ba81b3dc75bf851ddb47542c87f210f2c8c1f92c96a32e6421a83ca3da2",
+      "bytes": 17083
+    },
+    "custom_components/aqara_m1s_local/select.py": {
+      "sha256": "4b361c8dd9ff08e5b06f1ab6fd13997214f6dde87c1955a224f258555129f5a4",
+      "bytes": 751
+    },
+    "custom_components/aqara_m1s_local/sensor.py": {
+      "sha256": "b84360dab1932bca26dadf2cc36bbfa62be73a67e6d627206ba2ea0daf446b35",
+      "bytes": 3854
+    },
+    "custom_components/aqara_m1s_local/services.yaml": {
+      "sha256": "cedd986106438bc2a579ee69a5b0fb0c25b770ca7a8b1c53d34848dbc1aaa1bd",
+      "bytes": 1411
+    },
+    "custom_components/aqara_m1s_local/stock_protocol.py": {
+      "sha256": "001a8bf557e623232fcb801410a6be05309c2a97900c4204c3fafc3ffdca4703",
+      "bytes": 11853
+    },
+    "custom_components/aqara_m1s_local/strings.json": {
+      "sha256": "378d89dcb60f8e61c7be3fb705571d94a362c815a0273edd084c79de8f8f2021",
+      "bytes": 1527
+    },
+    "custom_components/aqara_m1s_local/switch.py": {
+      "sha256": "d9c87dbedcf2786b36f31060338b8196c6a4044f23f4c26f0b1fc9d851815007",
+      "bytes": 1420
+    },
+    "custom_components/aqara_m1s_local/system_status.py": {
+      "sha256": "f3b4dbd627daea4f614e6109dfa153c80047ee378de8799a29ff14ab5d6a7fff",
+      "bytes": 1843
+    },
+    "custom_components/aqara_m1s_local/translations/en.json": {
+      "sha256": "378d89dcb60f8e61c7be3fb705571d94a362c815a0273edd084c79de8f8f2021",
+      "bytes": 1527
+    },
+    "custom_components/aqara_m1s_local/translations/ro.json": {
+      "sha256": "d04ac02d3754421aa6b04e804cc10ad891754e3fbed5c2d109c4dace61652293",
+      "bytes": 1558
+    },
+    "hacs.json": {
+      "sha256": "126aba53bd37f7d317fd95418b5301360985cb4fed51e36a8216a34a9db88d99",
+      "bytes": 146
+    },
+    "PROVENANCE.md": {
+      "sha256": "fff96430722ea8fc167cf11b720427213fbf7032b13e7534b2f5061c66e47273",
+      "bytes": 1891
+    },
+    "README.md": {
+      "sha256": "b42763721bde25f1e63a61db7a816a5ccbc6092510ad40c1f788458a38524a53",
+      "bytes": 7152
+    },
+    "SOURCE_EVIDENCE.json": {
+      "sha256": "d7504e50abafc559f418587216d7ff97a22da1a352b1541f8cbca9be00a9c069",
+      "bytes": 1520
+    },
+    "TEST_RESULTS.json": {
+      "sha256": "d960f61298ca7313b6a974ebb41ca2a507ce84b50930668d9dee5925239bbf3b",
+      "bytes": 573
+    },
+    "tests/helpers.py": {
+      "sha256": "b05146bd2efaa5511409ea808afe778be6d3125a57419bfc011fce98421f8d4b",
+      "bytes": 9852
+    },
+    "tests/requirements.txt": {
+      "sha256": "1eeb7c7011bff6fdb0148e5a832b9b9d972d51d7f155a284874897ce3362a7b6",
+      "bytes": 17
+    },
+    "tests/test_ha_adapter.py": {
+      "sha256": "0164477141a619020c3ff314d56bb893d7a2013d24ef937bebeb65111108a3ca",
+      "bytes": 6633
+    },
+    "tests/test_protocol.py": {
+      "sha256": "4aa4ec399772727e36c77ec3fa900769d4d0ed32f0137d8a52d2bb41b6b6fdca",
+      "bytes": 6339
+    },
+    "tests/test_runtime.py": {
+      "sha256": "0d594a9087c6bd2fe6e26a34832e966a6be0c249f1a6632b7a6c1db9ff124714",
+      "bytes": 10708
+    },
+    "tests/test_transport.py": {
+      "sha256": "b746dd803630edfb9ee2de8f12fd5df0edac78805c8924194dbdc757774d9831",
+      "bytes": 9918
+    },
+    "tools/build_private.py": {
+      "sha256": "aef83336d3759cb2bd0c8783e07781ac89b7641e804289e19968f5910342f6cb",
+      "bytes": 7964
+    }
+  },
+  "self_hash_note": "This manifest excludes its own hash; archive SHA256 is provided separately"
+}

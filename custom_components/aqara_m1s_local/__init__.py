@@ -1,276 +1,152 @@
+"""Aqara M1S Local: stock-service adapter, not a coordinator replacement."""
+
 from __future__ import annotations
 
-from homeassistant.components import button, light, media_player, number, select, sensor
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import (
-    CONF_HOST,
-    CONF_PASSWORD,
-    CONF_PORT,
-    CONF_USERNAME,
-)
-from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.helpers import device_registry as dr
+import probatio as vol
+from homeassistant.const import Platform
+from homeassistant.exceptions import HomeAssistantError
 
 from .client import AqaraM1SClient
 from .const import (
+    CONF_AUDIO_LIMIT,
+    CONF_CHILD_CONTROL,
     CONF_MQTT_PORT,
+    CONF_STALE_SECONDS,
     DATA_CLIENTS,
-    DATA_MQTT_CLIENTS,
-    DATA_PLAYBACK_VOLUME,
-    DATA_RADIO_PLAYERS,
-    DATA_SELECTED_SOUND,
-    DATA_SOUND_MAP,
-    DATA_SOUND_PLAYERS,
+    DATA_STOCK,
     DEFAULT_MQTT_PORT,
-    DEFAULT_PASSWORD,
     DEFAULT_PORT,
-    DEFAULT_USERNAME,
     DOMAIN,
     SERVICE_PLAY_SOUND,
-    SERVICE_PLAY_URL,
-    SERVICE_RUN_COMMAND,
+    SERVICE_REFRESH,
 )
 from .mqtt_client import AqaraM1SMqttClient
-from .sound_player import AqaraM1SSoundPlayer
+from .runtime import StockRuntime
 
 PLATFORMS = [
-    button.DOMAIN,
-    light.DOMAIN,
-    media_player.DOMAIN,
-    number.DOMAIN,
-    sensor.DOMAIN,
-    select.DOMAIN,
+    Platform.BINARY_SENSOR,
+    Platform.BUTTON,
+    Platform.EVENT,
+    Platform.LIGHT,
+    Platform.NUMBER,
+    Platform.SELECT,
+    Platform.SENSOR,
+    Platform.SWITCH,
 ]
+_SELECTOR = {
+    vol.Optional("entry_id"): str,
+    vol.Optional("host"): str,
+}
 
 
+def _register_services(hass):
+    if hass.services.has_service(DOMAIN, SERVICE_PLAY_SOUND):
+        return
 
-async def async_setup_entry(
-    hass: HomeAssistant,
-    entry: ConfigEntry,
-) -> bool:
-    host = entry.data[CONF_HOST]
-    port = entry.data.get(CONF_PORT, DEFAULT_PORT)
-    mqtt_port = entry.data.get(
-        CONF_MQTT_PORT,
-        DEFAULT_MQTT_PORT,
-    )
-    username = entry.data.get(
-        CONF_USERNAME,
-        DEFAULT_USERNAME,
-    )
-    password = entry.data.get(
-        CONF_PASSWORD,
-        DEFAULT_PASSWORD,
-    )
-
-    client = AqaraM1SClient(
-        host=host,
-        port=port,
-        username=username,
-        password=password,
-    )
-    mqtt_client = AqaraM1SMqttClient(
-        host=host,
-        port=mqtt_port,
-    )
-
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN].setdefault(DATA_CLIENTS, {})
-    hass.data[DOMAIN].setdefault(
-        DATA_MQTT_CLIENTS,
-        {},
-    )
-    hass.data[DOMAIN].setdefault(
-        DATA_SELECTED_SOUND,
-        {},
-    )
-    hass.data[DOMAIN].setdefault(
-        DATA_SOUND_MAP,
-        {},
-    )
-    hass.data[DOMAIN].setdefault(
-        DATA_PLAYBACK_VOLUME,
-        {},
-    )
-    hass.data[DOMAIN].setdefault(
-        DATA_RADIO_PLAYERS,
-        {},
-    )
-    hass.data[DOMAIN].setdefault(
-        DATA_SOUND_PLAYERS,
-        {},
-    )
-
-    hass.data[DOMAIN][DATA_CLIENTS][
-        entry.entry_id
-    ] = client
-    hass.data[DOMAIN][DATA_MQTT_CLIENTS][
-        entry.entry_id
-    ] = mqtt_client
-    hass.data[DOMAIN][DATA_SELECTED_SOUND][
-        entry.entry_id
-    ] = (
-        "/data/musics/music-scene/"
-        "door_bell_1.wav"
-    )
-    hass.data[DOMAIN][DATA_SOUND_MAP][
-        entry.entry_id
-    ] = {}
-    hass.data[DOMAIN][DATA_PLAYBACK_VOLUME][
-        entry.entry_id
-    ] = 50
-    hass.data[DOMAIN][DATA_SOUND_PLAYERS][entry.entry_id] = AqaraM1SSoundPlayer(
-        hass, client
-    )
-
-    device_registry = dr.async_get(hass)
-    device_registry.async_get_or_create(
-        config_entry_id=entry.entry_id,
-        identifiers={(DOMAIN, host)},
-        name=entry.data.get(
-            "name",
-            f"Aqara M1S {host}",
-        ),
-        manufacturer="Aqara",
-        model="M1S",
-    )
-
-    await mqtt_client.start()
-    await hass.config_entries.async_forward_entry_setups(
-        entry,
-        PLATFORMS,
-    )
-
-    async def _get_client(
-        call: ServiceCall,
-    ) -> AqaraM1SClient:
-        call_host = call.data.get("host")
-        if call_host:
-            for configured_client in hass.data[
-                DOMAIN
-            ][DATA_CLIENTS].values():
-                if configured_client.host == call_host:
-                    return configured_client
-            return AqaraM1SClient(
-                host=call_host,
-                port=call.data.get(
-                    "port",
-                    DEFAULT_PORT,
-                ),
-                username=call.data.get(
-                    "username",
-                    DEFAULT_USERNAME,
-                ),
-                password=call.data.get(
-                    "password",
-                    DEFAULT_PASSWORD,
-                ),
-            )
-        return hass.data[DOMAIN][DATA_CLIENTS][
-            entry.entry_id
+    def resolve(data):
+        entries = hass.data[DOMAIN][DATA_STOCK]
+        matches = [
+            runtime
+            for entry_id, runtime in entries.items()
+            if ("entry_id" not in data or entry_id == data["entry_id"])
+            and ("host" not in data or runtime.client.host == data["host"])
         ]
+        if len(matches) != 1:
+            raise HomeAssistantError(
+                "Specify one configured M1S using entry_id or host"
+            )
+        return matches[0]
 
-    async def play_url(call: ServiceCall) -> None:
-        selected_client = await _get_client(call)
-        url = call.data["url"]
-        command = (
-            f'wget -q "{url}" '
-            "-O /tmp/ha_audio.wav "
-            "&& aplay -x 1 /tmp/ha_audio.wav"
-        )
-        await hass.async_add_executor_job(
-            selected_client.run_command,
-            command,
-        )
+    async def play(call):
+        runtime = resolve(call.data)
+        path = call.data.get("sound_path")
+        if path is not None and path != "/data/musics/music-scene/door_bell_1.wav":
+            raise HomeAssistantError(
+                "This WAV has no validated stock catalog mapping; no fallback playback was started"
+            )
+        try:
+            await runtime.async_play_sound(
+                call.data.get("sound_id", 1), call.data.get("volume")
+            )
+        except (OSError, ValueError, TimeoutError, ConnectionError) as err:
+            raise HomeAssistantError(
+                "Native playback was not confirmed; it was not retried"
+            ) from err
 
-    async def play_sound(
-        call: ServiceCall,
-    ) -> None:
-        selected_client = await _get_client(call)
-        path = call.data["path"]
-        sound_player = hass.data[DOMAIN][DATA_SOUND_PLAYERS][entry.entry_id]
-        await sound_player.async_play(
-            path,
-            hass.data[DOMAIN][DATA_PLAYBACK_VOLUME].get(entry.entry_id, 50),
-        )
+    async def refresh(call):
+        await resolve(call.data).async_refresh_inventory()
 
-    async def run_command(
-        call: ServiceCall,
-    ) -> None:
-        selected_client = await _get_client(call)
-        await hass.async_add_executor_job(
-            selected_client.run_command,
-            call.data["command"],
-        )
-
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_PLAY_URL,
-        play_url,
-    )
     hass.services.async_register(
         DOMAIN,
         SERVICE_PLAY_SOUND,
-        play_sound,
+        play,
+        schema=vol.Schema(
+            {
+                **_SELECTOR,
+                vol.Optional("sound_id", default=1): vol.All(
+                    int, vol.Range(min=1, max=1)
+                ),
+                vol.Optional("sound_path"): str,
+                vol.Optional("volume"): vol.All(int, vol.Range(min=1, max=100)),
+            }
+        ),
     )
     hass.services.async_register(
-        DOMAIN,
-        SERVICE_RUN_COMMAND,
-        run_command,
+        DOMAIN, SERVICE_REFRESH, refresh, schema=vol.Schema(_SELECTOR)
     )
 
+
+async def async_setup_entry(hass, entry):
+    data = hass.data.setdefault(DOMAIN, {})
+    for key in (DATA_STOCK, DATA_CLIENTS):
+        data.setdefault(key, {})
+    client = AqaraM1SClient(
+        entry.data["host"],
+        entry.data.get("port", DEFAULT_PORT),
+        entry.data.get("username", "admin"),
+        entry.data.get("password", ""),
+    )
+    mqtt = AqaraM1SMqttClient(
+        client.host, entry.data.get(CONF_MQTT_PORT, DEFAULT_MQTT_PORT)
+    )
+    runtime = StockRuntime(
+        client,
+        mqtt,
+        hass.async_add_executor_job,
+        audio_limit=entry.options.get(CONF_AUDIO_LIMIT, 5),
+        allow_child_control=entry.options.get(CONF_CHILD_CONTROL, False),
+        stale_seconds=entry.options.get(CONF_STALE_SECONDS, 86400),
+    )
+    data[DATA_STOCK][entry.entry_id] = runtime
+    data[DATA_CLIENTS][entry.entry_id] = client
+    try:
+        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+        await runtime.async_start()
+    except BaseException:
+        try:
+            await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+        finally:
+            await runtime.async_close()
+            data[DATA_STOCK].pop(entry.entry_id, None)
+            data[DATA_CLIENTS].pop(entry.entry_id, None)
+        raise
+    entry.async_on_unload(entry.add_update_listener(_reload))
+    _register_services(hass)
     return True
 
 
-async def async_unload_entry(
-    hass: HomeAssistant,
-    entry: ConfigEntry,
-) -> bool:
-    unloaded = (
-        await hass.config_entries.async_unload_platforms(
-            entry,
-            PLATFORMS,
-        )
-    )
-    if not unloaded:
+async def _reload(hass, entry):
+    await hass.config_entries.async_reload(entry.entry_id)
+
+
+async def async_unload_entry(hass, entry):
+    if not await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         return False
-
-    mqtt_client = hass.data[DOMAIN][
-        DATA_MQTT_CLIENTS
-    ].pop(entry.entry_id, None)
-    if mqtt_client:
-        await mqtt_client.stop()
-
-    radio_player = hass.data[DOMAIN][DATA_RADIO_PLAYERS].pop(
-        entry.entry_id,
-        None,
-    )
-    if radio_player:
-        await radio_player.async_shutdown()
-
-    sound_player = hass.data[DOMAIN][DATA_SOUND_PLAYERS].pop(
-        entry.entry_id,
-        None,
-    )
-    if sound_player:
-        await sound_player.async_stop()
-
-    telnet_client = hass.data[DOMAIN][DATA_CLIENTS].pop(
-        entry.entry_id,
-        None,
-    )
-    if telnet_client:
-        await hass.async_add_executor_job(telnet_client.close)
-    hass.data[DOMAIN][DATA_SELECTED_SOUND].pop(
-        entry.entry_id,
-        None,
-    )
-    hass.data[DOMAIN][DATA_SOUND_MAP].pop(
-        entry.entry_id,
-        None,
-    )
-    hass.data[DOMAIN][DATA_PLAYBACK_VOLUME].pop(
-        entry.entry_id,
-        None,
-    )
+    data = hass.data[DOMAIN]
+    runtime = data[DATA_STOCK].pop(entry.entry_id)
+    await runtime.async_close()
+    data[DATA_CLIENTS].pop(entry.entry_id, None)
+    if not data[DATA_STOCK]:
+        for service in (SERVICE_PLAY_SOUND, SERVICE_REFRESH):
+            hass.services.async_remove(DOMAIN, service)
     return True

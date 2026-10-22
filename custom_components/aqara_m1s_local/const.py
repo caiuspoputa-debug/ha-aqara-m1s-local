@@ -1,29 +1,14 @@
 DOMAIN = "aqara_m1s_local"
-
-CONF_HOST = "host"
-CONF_PORT = "port"
-CONF_USERNAME = "username"
-CONF_PASSWORD = "password"
-CONF_NAME = "name"
+VERSION = "0.6.0"
 CONF_MQTT_PORT = "mqtt_port"
-
 DEFAULT_PORT = 23
 DEFAULT_MQTT_PORT = 1884
 DEFAULT_USERNAME = "admin"
 DEFAULT_PASSWORD = ""
-
-SERVICE_PLAY_URL = "play_url"
-SERVICE_PLAY_SOUND = "play_sound"
-SERVICE_RUN_COMMAND = "run_command"
-
+CONF_AUDIO_LIMIT = "native_audio_limit"
+CONF_CHILD_CONTROL = "allow_child_control"
+CONF_STALE_SECONDS = "stale_seconds"
+DATA_STOCK = "stock"
 DATA_CLIENTS = "clients"
-DATA_MQTT_CLIENTS = "mqtt_clients"
-DATA_SELECTED_SOUND = "selected_sound"
-DATA_SOUND_MAP = "sound_map"
-DATA_PLAYBACK_VOLUME = "playback_volume"
-
-MQTT_TOPIC_ZIGBEE = "zigbee/send"
-MQTT_TOPIC_RGB = "ioctl/recv"
-
-DATA_RADIO_PLAYERS = "radio_players"
-DATA_SOUND_PLAYERS = "sound_players"
+SERVICE_PLAY_SOUND = "play_sound"
+SERVICE_REFRESH = "refresh_inventory"

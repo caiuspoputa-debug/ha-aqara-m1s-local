@@ -1,109 +1,47 @@
-from __future__ import annotations
-
-from pathlib import PurePosixPath
-import re
-
 from homeassistant.components.button import ButtonEntity
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.exceptions import HomeAssistantError
 
-from .const import (
-    DATA_CLIENTS,
-    DATA_PLAYBACK_VOLUME,
-    DATA_SELECTED_SOUND,
-    DATA_SOUND_PLAYERS,
-    DOMAIN,
-)
-
-FALLBACK_SOUNDS = [
-    "/data/musics/music-scene/door_bell_1.wav",
-    "/data/musics/music-scene/alarm.wav",
-    "/data/musics/music-scene/arm_ok.wav",
-    "/data/musics/music-scene/disarm.wav",
-]
+from .const import DATA_STOCK, DOMAIN
+from .entity import StockEntity
 
 
-def label_for_path(path: str) -> str:
-    p = PurePosixPath(path)
-    parent = p.parent.name.replace("music-", "").replace("_", " ").title()
-    name = p.stem.replace("_", " ").replace("-", " ").title()
-    return f"Play {parent} {name}"
+async def async_setup_entry(hass, entry, async_add_entities):
+    runtime = hass.data[DOMAIN][DATA_STOCK][entry.entry_id]
+    async_add_entities([StockSound(entry, runtime), RefreshInventory(entry, runtime)])
 
 
-def key_for_path(path: str) -> str:
-    key = path.replace("/data/musics/", "").replace("/", "_").replace(".", "_")
-    return re.sub(r"[^a-zA-Z0-9_]+", "_", key).lower()
+class StockSound(StockEntity, ButtonEntity):
+    _attr_icon = "mdi:bell-ring"
 
-
-async def async_setup_entry(
-    hass: HomeAssistant,
-    entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
-) -> None:
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN].setdefault(DATA_PLAYBACK_VOLUME, {})
-    hass.data[DOMAIN][DATA_PLAYBACK_VOLUME].setdefault(entry.entry_id, 50)
-
-    client = hass.data[DOMAIN][DATA_CLIENTS][entry.entry_id]
-    sounds = await hass.async_add_executor_job(client.list_sounds)
-    if not sounds:
-        sounds = FALLBACK_SOUNDS
-
-    entities = [AqaraM1SSelectedSoundButton(hass, entry, client)]
-    entities += [AqaraM1SSoundButton(hass, entry, client, path) for path in sounds]
-    async_add_entities(entities)
-
-
-class AqaraM1SSelectedSoundButton(ButtonEntity):
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, client) -> None:
-        self.hass = hass
-        self.entry = entry
-        self.client = client
-        self._attr_name = "Play Selected Sound"
-        self._attr_unique_id = f"{entry.entry_id}_play_selected_sound"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, self.client.host)},
-            "name": entry.data.get("name", f"Aqara M1S {self.client.host}"),
-            "manufacturer": "Aqara",
-            "model": "M1S",
-        }
-
-    async def async_press(self) -> None:
-        path = self.hass.data[DOMAIN][DATA_SELECTED_SOUND].get(self.entry.entry_id)
-        if not path:
-            return
-        volume = self.hass.data[DOMAIN][DATA_PLAYBACK_VOLUME].get(
-            self.entry.entry_id, 50
+    def __init__(self, entry, runtime):
+        super().__init__(
+            entry, runtime, "play_selected_sound", "Play native doorbell 1"
         )
-        player = self.hass.data[DOMAIN][DATA_SOUND_PLAYERS][self.entry.entry_id]
-        await player.async_play(path, volume)
 
-
-class AqaraM1SSoundButton(ButtonEntity):
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, client, path: str) -> None:
-        self.hass = hass
-        self.entry = entry
-        self.client = client
-        self.path = path
-        self._attr_name = label_for_path(path)
-        self._attr_unique_id = f"{entry.entry_id}_play_{key_for_path(path)}"
-        self._attr_extra_state_attributes = {
-            "file_path": path,
-            "playback_route": "ffmpeg_to_aplay",
-            "respects_playback_volume": True,
-            "light_effect": False,
-        }
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, self.client.host)},
-            "name": entry.data.get("name", f"Aqara M1S {self.client.host}"),
-            "manufacturer": "Aqara",
-            "model": "M1S",
+    @property
+    def extra_state_attributes(self):
+        return {
+            "playback_route": "basis_cli_ha_basis_local",
+            "once": True,
+            "completion_observed": False,
+            "catalog_id": 1,
         }
 
-    async def async_press(self) -> None:
-        volume = self.hass.data[DOMAIN][DATA_PLAYBACK_VOLUME].get(
-            self.entry.entry_id, 50
-        )
-        player = self.hass.data[DOMAIN][DATA_SOUND_PLAYERS][self.entry.entry_id]
-        await player.async_play(self.path, volume)
+    async def async_press(self):
+        try:
+            await self.runtime.async_play_sound()
+        except (OSError, ValueError, TimeoutError, ConnectionError) as err:
+            raise HomeAssistantError(
+                "Native playback was not confirmed; no retry was sent"
+            ) from err
+
+
+class RefreshInventory(StockEntity, ButtonEntity):
+    _attr_entity_category = "diagnostic"
+    _attr_icon = "mdi:refresh"
+
+    def __init__(self, entry, runtime):
+        super().__init__(entry, runtime, "refresh_inventory", "Refresh stock inventory")
+
+    async def async_press(self):
+        await self.runtime.async_refresh_inventory()

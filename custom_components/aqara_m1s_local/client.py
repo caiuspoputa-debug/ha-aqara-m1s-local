@@ -1,13 +1,20 @@
+"""Existing authorized shell transport, with exact framing and no write replay."""
+
+from __future__ import annotations
+
+import re
+import secrets
+import shlex
 import socket
 import threading
 import time
 from dataclasses import dataclass, field
 
-IAC = 255
-DONT = 254
-DO = 253
-WONT = 252
-WILL = 251
+
+@dataclass(frozen=True)
+class CommandResult:
+    output: str
+    returncode: int
 
 
 @dataclass
@@ -15,146 +22,154 @@ class AqaraM1SClient:
     host: str
     port: int = 23
     username: str = "admin"
-    password: str = ""
-    timeout: float = 8.0
+    password: str = field(default="", repr=False)
+    timeout: float = 8
     _sock: socket.socket | None = field(default=None, init=False, repr=False)
-    _lock: threading.RLock = field(default_factory=threading.RLock, init=False, repr=False)
-    _command_id: int = field(default=0, init=False, repr=False)
+    _lock: threading.RLock = field(
+        default_factory=threading.RLock, init=False, repr=False
+    )
+    _iac: bytearray = field(default_factory=bytearray, init=False, repr=False)
 
-    def _negotiate(self, data: bytes) -> bytes:
-        out = bytearray()
-        i = 0
-        while i < len(data):
-            if data[i] == IAC and i + 2 < len(data):
-                i += 3
+    def _decode(self, raw: bytes) -> bytes:
+        """Preserve fragmented Telnet negotiation, including subnegotiation."""
+        self._iac.extend(raw)
+        result = bytearray()
+        while self._iac:
+            if self._iac[0] != 255:
+                result.append(self._iac.pop(0))
                 continue
-            out.append(data[i])
-            i += 1
-        return bytes(out)
-
-    def _reply_negotiation(self, sock: socket.socket, data: bytes) -> None:
-        i = 0
-        replies = bytearray()
-        while i < len(data):
-            if data[i] == IAC and i + 2 < len(data):
-                cmd = data[i + 1]
-                opt = data[i + 2]
-                if cmd == WILL:
-                    replies += bytes([IAC, DONT, opt])
-                elif cmd == DO:
-                    replies += bytes([IAC, WONT, opt])
-                i += 3
-            else:
-                i += 1
-        if replies:
-            sock.sendall(replies)
-
-    def _read_some(self, sock: socket.socket, seconds: float = 0.5) -> str:
-        end = time.monotonic() + seconds
-        chunks = []
-        while time.monotonic() < end:
-            try:
-                data = sock.recv(4096)
-                if not data:
-                    raise ConnectionError("Telnet connection closed by hub")
-                self._reply_negotiation(sock, data)
-                chunks.append(self._negotiate(data))
-            except socket.timeout:
+            if len(self._iac) < 2:
                 break
-        return b"".join(chunks).decode("latin1", errors="ignore")
+            command = self._iac[1]
+            if command == 255:
+                result.append(255)
+                del self._iac[:2]
+            elif command in (251, 252, 253, 254):
+                if len(self._iac) < 3:
+                    break
+                if command in (251, 253) and self._sock:
+                    self._sock.sendall(
+                        bytes((255, 254 if command == 251 else 252, self._iac[2]))
+                    )
+                del self._iac[:3]
+            elif command == 250:
+                end = self._iac.find(b"\xff\xf0", 2)
+                if end < 0:
+                    if len(self._iac) > 4096:
+                        raise ValueError("Oversized Telnet negotiation")
+                    break
+                del self._iac[: end + 2]
+            else:
+                del self._iac[:2]
+        return bytes(result)
 
-    def _read_until_any(self, sock: socket.socket, markers, timeout: float = 8.0) -> str:
-        end = time.monotonic() + timeout
-        text = ""
-        while time.monotonic() < end:
-            text += self._read_some(sock, min(0.4, max(0.05, end - time.monotonic())))
-            low = text.lower()
-            for marker in markers:
-                if marker.lower() in low:
-                    return text
-        return text
+    def _read(self, deadline, predicate, maximum=131072):
+        output = ""
+        while time.monotonic() < deadline:
+            self._sock.settimeout(min(0.25, max(0.01, deadline - time.monotonic())))
+            try:
+                raw = self._sock.recv(4096)
+            except TimeoutError:
+                continue
+            if not raw:
+                raise ConnectionError("Hub closed the shell connection")
+            output += (
+                self._decode(raw).decode("utf-8", errors="replace").replace("\r", "")
+            )
+            if len(output) > maximum:
+                raise ValueError("Shell output exceeded its limit")
+            if predicate(output):
+                return output
+        raise TimeoutError("Hub command deadline exceeded; outcome may be unknown")
 
-    def _close_locked(self) -> None:
-        sock = self._sock
-        self._sock = None
-        if sock is None:
+    def _connect(self):
+        if self._sock:
             return
-        try:
-            sock.shutdown(socket.SHUT_RDWR)
-        except OSError:
-            pass
-        try:
-            sock.close()
-        except OSError:
-            pass
+        for value in (self.username, self.password):
+            if any(c in value for c in "\r\n\0"):
+                raise ValueError("Invalid login field")
+        self._sock = socket.create_connection(
+            (self.host, self.port), timeout=self.timeout
+        )
+        self._iac.clear()
+        prompt = lambda text: re.search(r"(?:^|\n)[^\n]*[#$]\s*$", text) is not None
+        output = self._read(
+            time.monotonic() + self.timeout,
+            lambda text: "login:" in text.lower() or prompt(text),
+            16384,
+        )
+        if "login:" in output.lower():
+            self._sock.sendall((self.username + "\n").encode())
+            output = self._read(
+                time.monotonic() + self.timeout,
+                lambda text: "password:" in text.lower() or prompt(text),
+                16384,
+            )
+            if "password:" in output.lower():
+                self._sock.sendall((self.password + "\n").encode())
+                self._read(time.monotonic() + self.timeout, prompt, 16384)
 
-    def close(self) -> None:
+    @staticmethod
+    def parse_result(output, begin, end):
+        """Only standalone output lines count; echoed commands cannot finish a call."""
+        start = re.search(rf"(?:^|\n){re.escape(begin)}\n", output)
+        if start is None:
+            return None
+        finish = re.search(
+            rf"(?:^|\n){re.escape(end)}:(\d{{1,3}})\n", output[start.end() :]
+        )
+        if finish is None:
+            return None
+        code = int(finish.group(1))
+        if code > 255:
+            raise ValueError("Invalid shell return code")
+        return CommandResult(
+            output[start.end() : start.end() + finish.start()].strip("\n"), code
+        )
+
+    def run_result(self, command: str, timeout: float | None = None) -> CommandResult:
+        if (
+            not isinstance(command, str)
+            or not command
+            or "\0" in command
+            or len(command) > 8192
+        ):
+            raise ValueError("Invalid command")
         with self._lock:
-            self._close_locked()
+            try:
+                self._connect()
+                nonce = secrets.token_hex(16)
+                begin, end = f"M1S_BEGIN_{nonce}", f"M1S_END_{nonce}"
+                framed = f"printf '\\n%s\\n' '{begin}'; ( {command} ); printf '\\n%s:%s\\n' '{end}' \"$?\"\n"
+                self._sock.sendall(framed.encode())
+                output = self._read(
+                    time.monotonic() + (timeout or self.timeout),
+                    lambda text: self.parse_result(text, begin, end) is not None,
+                )
+                return self.parse_result(output, begin, end)
+            except BaseException:
+                self._close_locked()
+                # A timed-out mutation may already have happened. Never resend it.
+                raise
 
-    def _connect_locked(self) -> socket.socket:
-        if self._sock is not None:
-            return self._sock
+    def run_argv(self, *argv: str, timeout=None):
+        return self.run_result(shlex.join(argv), timeout)
 
-        sock = socket.create_connection((self.host, int(self.port)), timeout=self.timeout)
-        sock.settimeout(0.35)
+    def run_command(self, command):
+        result = self.run_result(command)
+        if result.returncode:
+            raise RuntimeError(f"Hub command exited with status {result.returncode}")
+        return result.output
 
-        try:
-            initial = self._read_until_any(sock, ["login:", "#", "$"], timeout=4)
-            if "login:" in initial.lower():
-                sock.sendall((self.username + "\n").encode())
-                after_user = self._read_until_any(sock, ["password:", "#", "$"], timeout=4)
-                if "password:" in after_user.lower():
-                    sock.sendall((self.password + "\n").encode())
-                    prompt = self._read_until_any(sock, ["#", "$"], timeout=5)
-                    if "#" not in prompt and "$" not in prompt:
-                        raise ConnectionError("Telnet login did not reach a shell prompt")
-            self._sock = sock
-            return sock
-        except Exception:
+    def _close_locked(self):
+        sock, self._sock = self._sock, None
+        self._iac.clear()
+        if sock:
             try:
                 sock.close()
             except OSError:
                 pass
-            raise
 
-    def _run_command_locked(self, command: str) -> str:
-        sock = self._connect_locked()
-
-        # Discard any delayed prompt/output left from the previous command.
-        try:
-            self._read_some(sock, 0.05)
-        except ConnectionError:
-            self._close_locked()
-            raise
-
-        self._command_id += 1
-        marker = f"__M1S_DONE_{self._command_id}__"
-        sock.sendall((command + f"\necho {marker}$?\n").encode())
-        output = self._read_until_any(sock, [marker], timeout=self.timeout)
-        if marker not in output:
-            raise TimeoutError(f"Command did not finish within {self.timeout} seconds")
-        return output
-
-    def run_command(self, command: str) -> str:
+    def close(self):
         with self._lock:
-            last_error: Exception | None = None
-            for attempt in range(2):
-                try:
-                    return self._run_command_locked(command)
-                except (OSError, ConnectionError, TimeoutError) as err:
-                    last_error = err
-                    self._close_locked()
-                    if attempt == 0:
-                        continue
-            assert last_error is not None
-            raise last_error
-
-    def list_sounds(self) -> list[str]:
-        out = self.run_command('find /data/musics -type f -name "*.wav" 2>/dev/null')
-        sounds = []
-        for line in out.splitlines():
-            line = line.strip()
-            if line.startswith("/data/musics/") and line.endswith(".wav"):
-                sounds.append(line)
-        return sorted(set(sounds))
+            self._close_locked()

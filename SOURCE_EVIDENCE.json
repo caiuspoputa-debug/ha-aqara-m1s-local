@@ -1,0 +1,41 @@
+{
+  "scope": "Local evidence fingerprints only; original private source content is not redistributed",
+  "upstream_commit": "1a868ff7876a3bed74c59ed7d21a9d5d3883540e",
+  "sources": {
+    "base_0.5.9_manifest": {
+      "file": "manifest.json",
+      "sha256": "5a5bf830e69f2f804d2a0ce8852bb134bb063522303d7d4e46bfd21e9d27104d",
+      "bytes": 370
+    },
+    "stock_logical_light_contract": {
+      "file": "STOCK_LOGICAL_LIGHT_CONTRACT.txt",
+      "sha256": "6ef89e4707f73ba915dbd2fdd010bfd48059cf572d59fe8d8dcf3af5357a95c7",
+      "bytes": 5747
+    },
+    "stock_contract_modules": {
+      "file": "CONTRACT_MODULES.txt",
+      "sha256": "83e87351465eaa5ad3b5e6976c6922a1723c54042f31f94d61a7fbe41f1cbe21",
+      "bytes": 4687
+    },
+    "native_cli_ack_validator": {
+      "file": "m1s_stock_cli.c",
+      "sha256": "3abc55ac9b80c4edb5aee1d48ca1a4834f5e089ed511363eba06777726e71f51",
+      "bytes": 17896
+    },
+    "physical_lab_probe": {
+      "file": "M1S_Controller_v0.2.0-lab_Proba_hub_2026-10-21.txt",
+      "sha256": "7b9e31e1d68b734aa79d44f7e43ab2d83a66b6a91f445b468c3fe9bf2f5e8fd6",
+      "bytes": 2755
+    },
+    "stock_mqtt_contract": {
+      "file": "Contracte_MQTT_stock.txt",
+      "sha256": "e1eb42ce2c07e5284039bce6ab07eb0930d0c3c10ad24374362b1e169a19ba0a",
+      "bytes": 20931
+    },
+    "upstream_protocol_facts": {
+      "file": "utils.py",
+      "sha256": "f79ac40cca4f92e2482f99ae16fbc0151272299395d4626acd4a82036250f892",
+      "bytes": 102789
+    }
+  }
+}

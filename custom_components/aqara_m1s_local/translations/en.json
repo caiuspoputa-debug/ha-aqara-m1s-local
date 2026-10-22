@@ -1,0 +1,34 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Aqara M1S Stock Lab",
+        "description": "Use existing authorized Telnet and stock MQTT access. This integration does not enable access, install a tunnel or modify firmware. Do not connect ZoH/ZHA/Zigbee2MQTT to the stock coordinator UART.",
+        "data": {
+          "host": "Hub IP address or hostname",
+          "port": "Existing Telnet port",
+          "username": "Username",
+          "password": "Password",
+          "name": "Name",
+          "mqtt_port": "Existing stock MQTT tunnel port"
+        }
+      }
+    },
+    "abort": {"already_configured": "This hub is already configured"},
+    "error": {"invalid_input": "Check the host, port and login fields. URLs and control characters are not accepted."}
+  },
+  "options": {
+    "error": {"invalid_input": "Check the numeric limits and options."},
+    "step": {
+      "init": {
+        "title": "Stock lab limits",
+        "description": "Only native audio levels 1..5 were physically tested in the .109 lab. Raising the limit allows unvalidated, potentially loud levels. Child switch mappings are protocol-derived, not physically validated; both this option and entity enablement are required. Reconnect does not replay commands.",
+        "data": {
+          "native_audio_limit": "Maximum native sound volume (%)",
+          "allow_child_control": "Allow mapped child switch commands (experimental)",
+          "stale_seconds": "Maximum child report age (seconds)"
+        }
+      }
+    }
+  }
+}

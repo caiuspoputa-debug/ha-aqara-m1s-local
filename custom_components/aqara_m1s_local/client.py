@@ -161,6 +161,44 @@ class AqaraM1SClient:
             raise RuntimeError(f"Hub command exited with status {result.returncode}")
         return result.output
 
+    def open_mqtt_socket(self):
+        """One private Telnet PTY -> existing loopback broker; no LAN listener."""
+        with self._lock:
+            try:
+                result = self.run_result("/bin/busybox readlink /proc/self/fd/0")
+                if result.returncode or not re.fullmatch(
+                    r"/dev/(?:pts/[0-9]+|tty[p-zP-Z][0-9a-fA-F])", result.output.strip()
+                ):
+                    raise ConnectionError(
+                        "MQTT transport requires a private Telnet pseudo-terminal"
+                    )
+                marker = "M1S_MQTT_READY_" + secrets.token_hex(16)
+                command = (
+                    "/bin/busybox stty raw -echo && "
+                    f"/bin/busybox printf '\\n%s\\n' '{marker}' && "
+                    "exec /bin/busybox sh -c '"
+                    'while IFS= read -r line; do /bin/busybox printf "%s" "$line" | '
+                    "/bin/busybox base64 -d || exit; done | /bin/busybox nc 127.0.0.1 1883'\n"
+                )
+                self._sock.sendall(command.encode())
+                self._read(
+                    time.monotonic() + self.timeout,
+                    lambda text: (
+                        re.search(rf"(?:^|\n){re.escape(marker)}\n", text) is not None
+                    ),
+                    16384,
+                )
+                if self._iac:
+                    raise ConnectionError(
+                        "Incomplete Telnet negotiation at stream handoff"
+                    )
+                sock, self._sock = self._sock, None
+                sock.setblocking(False)
+                return sock
+            except BaseException:
+                self._close_locked()
+                raise
+
     def _close_locked(self):
         sock, self._sock = self._sock, None
         self._iac.clear()

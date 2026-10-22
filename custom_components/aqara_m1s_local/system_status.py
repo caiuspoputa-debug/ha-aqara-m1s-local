@@ -3,17 +3,43 @@
 import math
 
 COMMAND = r"""
-printf 'uptime '; cut -d ' ' -f 1 /proc/uptime
-printf 'load_1m '; cut -d ' ' -f 1 /proc/loadavg
-awk '/^MemTotal:/ {t=$2} /^MemAvailable:/ {a=$2; found=1} END {if(t>0 && found) printf "memory_used_pct %.2f\n",100*(t-a)/t}' /proc/meminfo
-for p in ha_basis mzigbee_agent miio_client; do
-  if pidof "$p" >/dev/null 2>&1; then printf '%s_present 1\n' "$p"; else printf '%s_present 0\n' "$p"; fi
+if read -r up rest < /proc/uptime; then printf 'uptime %s\n' "$up"; fi
+if read -r load rest < /proc/loadavg; then printf 'load_1m %s\n' "$load"; fi
+total=0; available=0; free=0; buffers=0; cached=0
+while read -r key value rest; do
+  case "$key" in
+    MemTotal:) total=$value;; MemAvailable:) available=$value;;
+    MemFree:) free=$value;; Buffers:) buffers=$value;; Cached:) cached=$value;;
+  esac
+done < /proc/meminfo
+if [ "$available" -eq 0 ]; then available=$((free+buffers+cached)); fi
+if [ "$total" -gt 0 ]; then printf 'memory_used_pct %s\n' "$((100*(total-available)/total))"; fi
+basis=0; zigbee=0; miio=0; broker=0; helpers=0
+test -r /proc/self/comm || exit 1
+for f in /proc/[0-9]*/comm; do
+  read -r name < "$f" 2>/dev/null || continue
+  case "$name" in
+    ha_basis) basis=1;; mzigbee_agent) zigbee=1;; miio_client) miio=1;;
+    mosquitto) broker=1;; nc) helpers=$((helpers+1));;
+  esac
 done
-printf 'wifi_operstate '; cat /sys/class/net/wlan0/operstate 2>/dev/null || printf 'unknown\n'
-printf 'wifi_carrier '; cat /sys/class/net/wlan0/carrier 2>/dev/null || printf 'unknown\n'
+printf 'ha_basis_present %s\nmzigbee_agent_present %s\nmiio_client_present %s\nmosquitto_present %s\nmqtt_relay_helpers %s\n' "$basis" "$zigbee" "$miio" "$broker" "$helpers"
+read -r wifi < /sys/class/net/wlan0/operstate 2>/dev/null || wifi=unknown
+read -r carrier < /sys/class/net/wlan0/carrier 2>/dev/null || carrier=unknown
+printf 'wifi_operstate %s\nwifi_carrier %s\n' "$wifi" "$carrier"
 """
-NUMBERS = {"uptime": (0, 1e10), "load_1m": (0, 1000), "memory_used_pct": (0, 100)}
-PRESENCE = ("ha_basis_present", "mzigbee_agent_present", "miio_client_present")
+NUMBERS = {
+    "uptime": (0, 1e10),
+    "load_1m": (0, 1000),
+    "memory_used_pct": (0, 100),
+    "mqtt_relay_helpers": (0, 256),
+}
+PRESENCE = (
+    "ha_basis_present",
+    "mzigbee_agent_present",
+    "miio_client_present",
+    "mosquitto_present",
+)
 
 
 def parse_snapshot(output):

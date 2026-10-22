@@ -6,11 +6,13 @@ import probatio as vol
 from homeassistant.const import Platform
 from homeassistant.exceptions import HomeAssistantError
 
+from .catalog import sound_for_option
 from .client import AqaraM1SClient
 from .const import (
     CONF_AUDIO_LIMIT,
     CONF_CHILD_CONTROL,
     CONF_MQTT_PORT,
+    CONF_MQTT_TRANSPORT,
     CONF_STALE_SECONDS,
     DATA_CLIENTS,
     DATA_STOCK,
@@ -21,7 +23,9 @@ from .const import (
     SERVICE_REFRESH,
 )
 from .mqtt_client import AqaraM1SMqttClient
+from .registry import RegistryCleanup
 from .runtime import StockRuntime
+from .telnet_mqtt import stream_factory
 
 PLATFORMS = [
     Platform.BINARY_SENSOR,
@@ -60,13 +64,31 @@ def _register_services(hass):
     async def play(call):
         runtime = resolve(call.data)
         path = call.data.get("sound_path")
-        if path is not None and path != "/data/musics/music-scene/door_bell_1.wav":
-            raise HomeAssistantError(
-                "This WAV has no validated stock catalog mapping; no fallback playback was started"
-            )
+        option = (
+            f"{call.data.get('sound_type', 'doorbell')}/{call.data.get('sound_id', 1)}"
+        )
+        if path is not None:
+            sound = next((s for s in runtime.sounds.values() if s.path == path), None)
+            if sound is None:
+                raise HomeAssistantError(
+                    "This WAV has no available native catalog mapping"
+                )
+            if (
+                "sound_type" in call.data
+                and sound.family != call.data["sound_type"]
+                or "sound_id" in call.data
+                and sound.index != call.data["sound_id"]
+            ):
+                raise HomeAssistantError(
+                    "Conflicting sound path and native catalog selection"
+                )
+            option = sound.option
         try:
+            sound = sound_for_option(option)
             await runtime.async_play_sound(
-                call.data.get("sound_id", 1), call.data.get("volume")
+                sound.index,
+                call.data.get("volume"),
+                sound_type=sound.family,
             )
         except (OSError, ValueError, TimeoutError, ConnectionError) as err:
             raise HomeAssistantError(
@@ -83,9 +105,8 @@ def _register_services(hass):
         schema=vol.Schema(
             {
                 **_SELECTOR,
-                vol.Optional("sound_id", default=1): vol.All(
-                    int, vol.Range(min=1, max=1)
-                ),
+                vol.Optional("sound_id"): vol.All(int, vol.Range(min=1, max=10)),
+                vol.Optional("sound_type"): vol.In(("doorbell", "welcome", "alarm")),
                 vol.Optional("sound_path"): str,
                 vol.Optional("volume"): vol.All(int, vol.Range(min=1, max=100)),
             }
@@ -106,8 +127,22 @@ async def async_setup_entry(hass, entry):
         entry.data.get("username", "admin"),
         entry.data.get("password", ""),
     )
+    transport = entry.options.get(CONF_MQTT_TRANSPORT, "telnet")
+    factory = (
+        stream_factory(
+            hass.async_add_executor_job,
+            host=client.host,
+            port=client.port,
+            username=client.username,
+            password=client.password,
+        )
+        if transport == "telnet"
+        else None
+    )
     mqtt = AqaraM1SMqttClient(
-        client.host, entry.data.get(CONF_MQTT_PORT, DEFAULT_MQTT_PORT)
+        client.host,
+        entry.data.get(CONF_MQTT_PORT, DEFAULT_MQTT_PORT),
+        stream_factory=factory,
     )
     runtime = StockRuntime(
         client,
@@ -117,10 +152,13 @@ async def async_setup_entry(hass, entry):
         allow_child_control=entry.options.get(CONF_CHILD_CONTROL, False),
         stale_seconds=entry.options.get(CONF_STALE_SECONDS, 86400),
     )
+    runtime.mqtt_transport = transport
     data[DATA_STOCK][entry.entry_id] = runtime
     data[DATA_CLIENTS][entry.entry_id] = client
     try:
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+        cleaner = RegistryCleanup(hass, entry, runtime)
+        entry.async_on_unload(runtime.listen(cleaner.update))
         await runtime.async_start()
     except BaseException:
         try:

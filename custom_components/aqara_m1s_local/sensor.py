@@ -2,11 +2,13 @@ from homeassistant.components.sensor import SensorEntity
 
 from .const import DATA_STOCK, DOMAIN
 from .entity import ChildFieldEntity, StockEntity, discover, discover_inventory
+from .registry import track_entities
 from .runtime import GATEWAY_FIELDS
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
     runtime = hass.data[DOMAIN][DATA_STOCK][entry.entry_id]
+    async_add_entities = track_entities(runtime, "sensor", async_add_entities)
     keys = (
         "children_present",
         "children_observed_this_session",
@@ -28,6 +30,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
         entry,
         async_add_entities,
         lambda e, r, did, model: [ChildLastReport(e, r, did, model)],
+        platform="sensor",
     )
 
 

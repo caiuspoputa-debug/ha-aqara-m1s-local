@@ -1,9 +1,10 @@
 play_sound:
   name: Play native stock sound
   description: >
-    Request one local doorbell/1 playback through ha_basis. RPC acceptance is
+    Request one local native catalog playback through ha_basis. RPC acceptance is
     not playback completion. No WAV upload, FFmpeg, automatic retry or ring restore.
-    Only catalog id 1 is lab-validated. Stock lab volume was tested at 1..5 percent.
+    Only existing mapped scene sounds are accepted. Doorbell/1 is physically lab-validated;
+    the other scene mappings are not. Stock lab volume was tested at 1..5 percent.
   fields:
     entry_id:
       name: Config entry
@@ -15,13 +16,22 @@ play_sound:
       selector:
         text:
     sound_id:
-      name: Validated native catalog id
+      name: Native family index
       default: 1
       selector:
         number:
           min: 1
-          max: 1
+          max: 10
           mode: box
+    sound_type:
+      name: Native sound family
+      default: doorbell
+      selector:
+        select:
+          options:
+            - doorbell
+            - welcome
+            - alarm
     volume:
       name: Per-request volume
       description: Must not exceed the configured native audio limit. Does not set global volume.
@@ -32,7 +42,7 @@ play_sound:
           mode: box
     sound_path:
       name: Legacy path compatibility
-      description: Only /data/musics/music-scene/door_bell_1.wav is mapped to native catalog id 1.
+      description: Must exactly match an existing mapped native scene WAV. No arbitrary file playback.
       selector:
         text:
 refresh_inventory:

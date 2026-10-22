@@ -43,7 +43,7 @@ class Message:
 
 
 class AqaraM1SMqttClient:
-    def __init__(self, host, port=1884):
+    def __init__(self, host, port=1884, *, stream_factory=None):
         self.host, self.port = host, port
         self.connected = False
         self.epoch = 0
@@ -52,6 +52,8 @@ class AqaraM1SMqttClient:
         self._messages, self._statuses = [], []
         self._packet_id = secrets.randbelow(65535) + 1
         self._ping_sent = None
+        self._stream_factory = stream_factory
+        self.last_error = None
 
     def _listen(self, listeners, callback):
         listeners.append(callback)
@@ -98,7 +100,13 @@ class AqaraM1SMqttClient:
                 await self._read_loop()
             except asyncio.CancelledError:
                 raise
-            except (TimeoutError, OSError, ValueError, asyncio.IncompleteReadError):
+            except (
+                TimeoutError,
+                OSError,
+                ValueError,
+                asyncio.IncompleteReadError,
+            ) as err:
+                self.last_error = type(err).__name__
                 _LOGGER.warning(
                     "Stock MQTT disconnected; retrying without replaying commands"
                 )
@@ -108,9 +116,12 @@ class AqaraM1SMqttClient:
             delay = min(30, delay * 2)
 
     async def _connect(self):
-        self._reader, self._writer = await asyncio.wait_for(
-            asyncio.open_connection(self.host, self.port), 8
+        connection = (
+            self._stream_factory()
+            if self._stream_factory
+            else asyncio.open_connection(self.host, self.port)
         )
+        self._reader, self._writer = await asyncio.wait_for(connection, 8)
         body = (
             _encode_utf8("MQTT")
             + b"\x04\x02\x00\x1e"
@@ -121,10 +132,12 @@ class AqaraM1SMqttClient:
         if header != 0x20 or body != b"\0\0":
             raise ValueError("Stock broker rejected the clean MQTT session")
         self._packet_id = self._packet_id % 65535 + 1
-        body = self._packet_id.to_bytes(2, "big") + b"".join(
+        subscription = self._packet_id.to_bytes(2, "big") + b"".join(
             _encode_utf8(t) + b"\0" for t in TOPICS
         )
-        await self._write(b"\x82" + _encode_remaining_length(len(body)) + body)
+        await self._write(
+            b"\x82" + _encode_remaining_length(len(subscription)) + subscription
+        )
         deadline = time.monotonic() + 8
         self.epoch += 1
         pending = []
@@ -142,6 +155,7 @@ class AqaraM1SMqttClient:
                 raise ValueError("Unexpected MQTT subscription response")
             pending.append((header, body))
         self._set_connected(True)
+        self.last_error = None
         for header, body in pending:
             await self._dispatch(header, body)
         self._ping_sent = None

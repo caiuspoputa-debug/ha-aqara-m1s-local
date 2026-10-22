@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from functools import partial
 
+from .catalog import COMMAND as CATALOG_COMMAND
+from .catalog import parse_catalog, sound_for_option
 from .const import VERSION
 from .stock_protocol import (
     BUTTON_ACTIONS,
@@ -74,6 +76,11 @@ class StockRuntime:
         self.children = {}
         self.inventory_valid = False
         self.inventory_time = None
+        self.inventory_generation = 0
+        self.capabilities_valid = False
+        self.sounds = {}
+        self.selected_sound = None
+        self.entity_catalog = {}
         self.shell_available = False
         self.gateway = {}
         self.gateway_epoch = -1
@@ -133,6 +140,7 @@ class StockRuntime:
             self.mqtt.add_message_listener(self.receive),
             self.mqtt.add_status_listener(self.connection_changed),
         ]
+        await self.async_refresh_catalog()
         await self.async_refresh_inventory()
         await self.async_refresh_system()
         await self.mqtt.start()
@@ -141,6 +149,7 @@ class StockRuntime:
     async def _maintain(self):
         while True:
             await asyncio.sleep(60)
+            await self.async_refresh_catalog()
             await self.async_refresh_inventory()
             await self.async_refresh_system()
             self.notify()
@@ -197,8 +206,25 @@ class StockRuntime:
                         del self.children[did]
                 self.inventory_valid = self.shell_available = True
                 self.inventory_time = datetime.now(UTC)
+                self.inventory_generation += 1
                 self.last_error = None
             self.notify()
+
+    async def async_refresh_catalog(self):
+        try:
+            result = await self.executor(self.client.run_result, CATALOG_COMMAND)
+            if result.returncode:
+                raise ValueError("Stock catalog unavailable")
+            sounds = parse_catalog(result.output)
+        except (OSError, ValueError, TimeoutError, ConnectionError):
+            self.capabilities_valid = False
+            self.counters["catalog_errors"] += 1
+        else:
+            self.sounds = sounds
+            if self.selected_sound not in sounds:
+                self.selected_sound = next(iter(sounds), None)
+            self.capabilities_valid = True
+        self.notify()
 
     def connection_changed(self, connected):
         # No cached values or retained events become live after a reconnect.
@@ -374,16 +400,21 @@ class StockRuntime:
             self.ring_stale = False
             self.notify()
 
-    async def async_play_sound(self, sound_id=1, volume=None):
-        # Only this native catalog entry was physically validated in .109 lab.
-        integer(sound_id, 1, 1)
+    async def async_play_sound(self, sound_id=1, volume=None, *, sound_type="doorbell"):
+        if self._closed:
+            raise ConnectionError("Integration is unloading; command not sent")
+        integer(sound_id, 1, 10)
+        sound = sound_for_option(f"{sound_type}/{sound_id}")
+        if not self.capabilities_valid or sound.option not in self.sounds:
+            raise ValueError("This sound is not in the current stock catalog")
         volume = self.volume if volume is None else integer(volume, 1, self.audio_limit)
+        value, args = sound.plan(volume)
         async with self._audio_light_lock:
             await self._cli(
                 "basis.system",
                 "system_sing",
-                f"1;1;0;1;{volume}",
-                ("-sys", "-s", "doorbell", "1", "0", str(volume)),
+                value,
+                args,
             )
             # Stock audio can touch the logical light cache. There is no proven getter.
             self.ring_stale = True
@@ -416,6 +447,10 @@ class StockRuntime:
         return {
             "version": VERSION,
             "mqtt_connected": self.mqtt.connected,
+            "mqtt_transport": getattr(self, "mqtt_transport", "direct"),
+            "mqtt_last_error": getattr(self.mqtt, "last_error", None),
+            "catalog_valid": self.capabilities_valid,
+            "native_sounds_available": len(self.sounds),
             "inventory_valid": self.inventory_valid,
             "shell_available": self.shell_available,
             "radio_ready": "not_proven",

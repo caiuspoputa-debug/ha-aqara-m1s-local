@@ -10,10 +10,12 @@ from homeassistant.exceptions import HomeAssistantError
 
 from .const import DATA_STOCK, DOMAIN
 from .entity import StockEntity
+from .registry import track_entities
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    async_add_entities(
+    runtime = hass.data[DOMAIN][DATA_STOCK][entry.entry_id]
+    track_entities(runtime, "light", async_add_entities)(
         [StockRing(entry, hass.data[DOMAIN][DATA_STOCK][entry.entry_id])]
     )
 

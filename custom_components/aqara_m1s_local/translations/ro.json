@@ -3,14 +3,14 @@
     "step": {
       "user": {
         "title": "Aqara M1S Stock Lab",
-        "description": "Foloseste accesul Telnet autorizat si tunelul MQTT stock deja existente. Nu activeaza acces, nu instaleaza tuneluri si nu modifica firmware. Nu conecta ZoH/ZHA/Zigbee2MQTT la UART-ul coordonatorului stock.",
+        "description": "Foloseste accesul Telnet deja autorizat. MQTT stock este accesat intern printr-o a doua sesiune autentificata, fara port LAN nou sau instalare pe hub. Utilizati numai reteaua locala de incredere. Nu conecta ZoH/ZHA/Zigbee2MQTT la UART-ul coordonatorului stock.",
         "data": {
           "host": "IP sau nume de retea al hubului",
           "port": "Port Telnet existent",
           "username": "Utilizator",
           "password": "Parola",
           "name": "Nume",
-          "mqtt_port": "Port tunel MQTT stock existent"
+          "mqtt_port": "Port MQTT LAN existent (folosit numai in modul direct)"
         }
       }
     },
@@ -22,10 +22,12 @@
     "step": {
       "init": {
         "title": "Limite stock lab",
-        "description": "Pe .109 au fost testate fizic numai volumele native 1..5. Cresterea limitei poate produce sunet puternic si ramane nevalidata. Controlul copiilor este experimental: necesita aceasta optiune si activarea entitatii switch. Reconectarea nu retrimite comenzi.",
+        "description": "Curatarea elimina numai entitatile vechi ale acestei intrari, dupa inventar si catalog valide. Copiii disparuti necesita doua inventare valide consecutive; indisponibilitatea nu provoaca stergerea. Modul telnet foloseste brokerul intern existent; direct necesita un port LAN deja disponibil. Volumele peste 5 si controlul copiilor sunt opt-in, nevalidate fizic.",
         "data": {
           "native_audio_limit": "Volum maxim pentru cererea de sunet nativ (%)",
           "allow_child_control": "Permite comenzi catre switch-uri copil mapate (experimental)",
+          "cleanup_obsolete_entities": "Elimina automat entitatile vechi ale integrarii",
+          "mqtt_transport": "Conexiune MQTT (telnet: broker intern; direct: port LAN existent)",
           "stale_seconds": "Vechimea maxima a raportului copilului (secunde)"
         }
       }

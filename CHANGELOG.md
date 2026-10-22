@@ -1,4 +1,20 @@
-# 0.6.1 - Corectie HACS
+# 0.6.2 - Stock real, evenimente si curatarea entitatilor
+
+- MQTT implicit prin sesiune Telnet autentificata spre brokerul intern;
+  nu mai depinde de un port LAN 1884 absent pe hubul stock.
+- Transport ASCII catre broker pentru a pastra octetii de control MQTT.
+  CONNACK/SUBACK, mesaje si keepalive verificate pe hubul stock.
+- Catalogul local descoperit: sonerii 1..4, welcome 1..10, alarm 1..9,
+  numai unde fisierele native exista. Fara fallback Aplay/FFmpeg.
+- Curatare automata activata implicit, strict pe intrarea integrarii.
+  Inventarul/catalogul invalid si simpla indisponibilitate nu sterg entitati.
+  Disparitia copiilor necesita doua inventare valide consecutive.
+- HomeKit si vechile controale nemapate nu mai raman entitati orphan.
+- Diagnostice sistem prin citire /proc; nu depind de pidof/cut inexistente
+  pe hub. Memoria foloseste MemAvailable sau o estimare free+buffers+cached.
+- Identitatile scenelor mapate sunt pastrate; fara publicare sau instalare.
+
+## 0.6.1 - Corectie HACS
 
 - Eliminat zip_release/filename: instalare din fisierele repository-ului.
 - Versiune manifest, constante si diagnostice actualizata la 0.6.1.

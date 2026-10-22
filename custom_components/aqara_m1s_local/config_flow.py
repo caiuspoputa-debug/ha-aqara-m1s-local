@@ -13,7 +13,9 @@ from homeassistant.helpers.selector import TextSelector
 from .const import (
     CONF_AUDIO_LIMIT,
     CONF_CHILD_CONTROL,
+    CONF_CLEANUP,
     CONF_MQTT_PORT,
+    CONF_MQTT_TRANSPORT,
     CONF_STALE_SECONDS,
     DEFAULT_MQTT_PORT,
     DEFAULT_PORT,
@@ -96,6 +98,13 @@ class M1SOptionsFlow(config_entries.OptionsFlow):
                 vol.Optional(
                     CONF_CHILD_CONTROL, default=options.get(CONF_CHILD_CONTROL, False)
                 ): bool,
+                vol.Optional(
+                    CONF_CLEANUP, default=options.get(CONF_CLEANUP, True)
+                ): bool,
+                vol.Optional(
+                    CONF_MQTT_TRANSPORT,
+                    default=options.get(CONF_MQTT_TRANSPORT, "telnet"),
+                ): vol.In(("telnet", "direct")),
                 vol.Optional(
                     CONF_STALE_SECONDS, default=options.get(CONF_STALE_SECONDS, 86400)
                 ): vol.All(int, vol.Range(min=60, max=604800)),

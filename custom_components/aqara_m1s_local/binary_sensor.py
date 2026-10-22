@@ -2,11 +2,13 @@ from homeassistant.components.binary_sensor import BinarySensorEntity
 
 from .const import DATA_STOCK, DOMAIN
 from .entity import ChildFieldEntity, StockEntity, discover, discover_inventory
+from .registry import track_entities
 from .system_status import PRESENCE
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
     runtime = hass.data[DOMAIN][DATA_STOCK][entry.entry_id]
+    async_add_entities = track_entities(runtime, "binary_sensor", async_add_entities)
     async_add_entities(
         [
             StockStatus(entry, runtime, key, name)
@@ -25,6 +27,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
         entry,
         async_add_entities,
         lambda e, r, did, model: [InventoryPresence(e, r, did, model)],
+        platform="binary_sensor",
     )
 
 

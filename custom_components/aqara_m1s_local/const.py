@@ -1,5 +1,6 @@
 DOMAIN = "aqara_m1s_local"
-VERSION = "0.6.1"
+VERSION = "0.6.2"
+CONF_MQTT_TRANSPORT = "mqtt_transport"
 CONF_MQTT_PORT = "mqtt_port"
 DEFAULT_PORT = 23
 DEFAULT_MQTT_PORT = 1884
@@ -8,6 +9,7 @@ DEFAULT_PASSWORD = ""
 CONF_AUDIO_LIMIT = "native_audio_limit"
 CONF_CHILD_CONTROL = "allow_child_control"
 CONF_STALE_SECONDS = "stale_seconds"
+CONF_CLEANUP = "cleanup_obsolete_entities"
 DATA_STOCK = "stock"
 DATA_CLIENTS = "clients"
 SERVICE_PLAY_SOUND = "play_sound"

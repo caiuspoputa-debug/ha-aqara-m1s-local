@@ -5,6 +5,7 @@ from __future__ import annotations
 from homeassistant.helpers.entity import Entity
 
 from .const import DATA_STOCK, DOMAIN
+from .registry import track_entities
 
 
 class StockEntity(Entity):
@@ -101,7 +102,7 @@ class ChildFieldEntity(StockEntity):
 
 def discover(hass, entry, async_add_entities, platform, factory):
     runtime = hass.data[DOMAIN][DATA_STOCK][entry.entry_id]
-    seen = set()
+    async_add_entities = track_entities(runtime, platform, async_add_entities)
 
     def update():
         entities = []
@@ -109,13 +110,15 @@ def discover(hass, entry, async_add_entities, platform, factory):
             if not child.present:
                 continue
             for descriptor in child.fields:
-                identity = (did, child.model, descriptor.key)
+                identity = (
+                    platform,
+                    f"{entry.entry_id}_{did}_{child.model}_{descriptor.key}",
+                )
                 if (
                     descriptor.platform == platform
-                    and identity not in seen
-                    and len(seen) < 1024
+                    and identity not in runtime.entity_catalog
+                    and len(runtime.entity_catalog) + len(entities) < 4096
                 ):
-                    seen.add(identity)
                     entities.append(
                         factory(entry, runtime, did, child.model, descriptor)
                     )
@@ -126,17 +129,19 @@ def discover(hass, entry, async_add_entities, platform, factory):
     update()
 
 
-def discover_inventory(hass, entry, async_add_entities, factory):
+def discover_inventory(hass, entry, async_add_entities, factory, *, platform):
     runtime = hass.data[DOMAIN][DATA_STOCK][entry.entry_id]
-    seen = set()
+    async_add_entities = track_entities(runtime, platform, async_add_entities)
 
     def update():
         entities = []
         for did, child in runtime.children.items():
-            identity = (did, child.model)
-            if child.present and identity not in seen:
-                seen.add(identity)
-                entities.extend(factory(entry, runtime, did, child.model))
+            if child.present:
+                entities.extend(
+                    e
+                    for e in factory(entry, runtime, did, child.model)
+                    if (platform, e._attr_unique_id) not in runtime.entity_catalog
+                )
         if entities:
             async_add_entities(entities)
 

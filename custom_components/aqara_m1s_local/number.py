@@ -5,10 +5,12 @@ from homeassistant.helpers.restore_state import RestoreEntity
 
 from .const import DATA_STOCK, DOMAIN
 from .entity import StockEntity
+from .registry import track_entities
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    async_add_entities(
+    runtime = hass.data[DOMAIN][DATA_STOCK][entry.entry_id]
+    track_entities(runtime, "number", async_add_entities)(
         [NativeVolume(entry, hass.data[DOMAIN][DATA_STOCK][entry.entry_id])]
     )
 
@@ -21,9 +23,7 @@ class NativeVolume(StockEntity, RestoreEntity, NumberEntity):
     _attr_icon = "mdi:volume-high"
 
     def __init__(self, entry, runtime):
-        super().__init__(
-            entry, runtime, "sound_playback_volume", "Native sound request volume"
-        )
+        super().__init__(entry, runtime, "sound_playback_volume", "Sound volume")
         self._attr_native_max_value = runtime.audio_limit
 
     async def async_added_to_hass(self):

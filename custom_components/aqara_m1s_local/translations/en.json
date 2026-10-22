@@ -3,14 +3,14 @@
     "step": {
       "user": {
         "title": "Aqara M1S Stock Lab",
-        "description": "Use existing authorized Telnet and stock MQTT access. This integration does not enable access, install a tunnel or modify firmware. Do not connect ZoH/ZHA/Zigbee2MQTT to the stock coordinator UART.",
+        "description": "Use existing authorized Telnet access. Stock MQTT is reached internally through a second authenticated session, without a new LAN port or installation on the hub. Use only a trusted LAN. Do not connect ZoH/ZHA/Zigbee2MQTT to the stock coordinator UART.",
         "data": {
           "host": "Hub IP address or hostname",
           "port": "Existing Telnet port",
           "username": "Username",
           "password": "Password",
           "name": "Name",
-          "mqtt_port": "Existing stock MQTT tunnel port"
+          "mqtt_port": "Existing LAN MQTT port (used only in direct mode)"
         }
       }
     },
@@ -22,10 +22,12 @@
     "step": {
       "init": {
         "title": "Stock lab limits",
-        "description": "Only native audio levels 1..5 were physically tested in the .109 lab. Raising the limit allows unvalidated, potentially loud levels. Child switch mappings are protocol-derived, not physically validated; both this option and entity enablement are required. Reconnect does not replay commands.",
+        "description": "Cleanup removes obsolete entities from this entry only, after valid inventory and sound discovery; missing children require two consecutive valid inventories. Unavailable status alone never triggers deletion. Telnet uses the existing internal stock broker; direct mode requires an already existing LAN endpoint. Audio levels above 5 and child control are opt-in and not physically validated.",
         "data": {
           "native_audio_limit": "Maximum native sound volume (%)",
           "allow_child_control": "Allow mapped child switch commands (experimental)",
+          "cleanup_obsolete_entities": "Automatically remove obsolete integration entities",
+          "mqtt_transport": "MQTT connection (telnet: internal broker; direct: existing LAN port)",
           "stale_seconds": "Maximum child report age (seconds)"
         }
       }

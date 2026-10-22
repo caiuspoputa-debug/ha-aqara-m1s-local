@@ -1,8 +1,21 @@
-# Aqara M1S Local 0.6.0 - STOCK LAB TEST
+# Aqara M1S Local 0.6.1 - STOCK LAB TEST
 
 Pachet privat de test, construit din baza 0.5.9 si contractele/probele
 .109 lab din 21-22 octombrie 2026. **Nu este o versiune instalata sau
-validata fizic integral. Nu publica acest pachet pe GitHub.**
+validata fizic integral.** Livrarea este locala, fara publicare automata.
+Arhiva REPOSITORY contine numai integrarea si documentatia necesara.
+Arhiva SOURCE_TESTS_PRIVAT si cercetarea privata raman separate.
+
+## Corectie HACS 0.6.1
+
+HACS descarca fisierele integrarii din repository. Nu exista zip_release
+sau filename in hacs.json, deci nu mai este obligatoriu un asset ZIP.
+In repository trebuie sa existe hacs.json in radacina si folderul
+custom_components/aqara_m1s_local cu toate fisierele din arhiva REPOSITORY.
+Se foloseste un release/tag nou v0.6.1, nu cel vechi v0.6.0.
+ZIP-ul REPOSITORY se extrage pentru a obtine fisierele de repository;
+nu este un asset pe care HACS trebuie sa il descarce.
+Detalii: HACS_FIX.md.
 
 ## Ce face
 
@@ -22,7 +35,8 @@ validata fizic integral. Nu publica acest pachet pe GitHub.**
 - Modelele necunoscute apar in inventar. Resursele lor raportate sunt
   senzori raw, doar-citire, implicit dezactivati, nu comenzi inventate.
 
-Detaliile si limitele sunt in CAPABILITATI.md si PROVENANCE.md.
+Detaliile si limitele sunt in CAPABILITATI.md; provenienta detaliata
+si testele sunt in pachetul privat de verificare.
 
 ## Ce NU pretinde
 
@@ -134,7 +148,7 @@ Codurile de gest nevalidate nu sunt ghicite.
 
 ## Verificare
 
-Testele sunt sintetice: protocoale, framing, inventar, evenimente, rutare
+Testele din pachetul privat sunt sintetice: protocoale, framing, inventar, evenimente, rutare
 multi-hub, lifecycle si broker MQTT local pe 127.0.0.1. Adaptorul HA este
 testat cu dubluri API, nu cu o instalare completa Home Assistant.
 Nu s-au rulat teste fizice noi pe hub in construirea acestui pachet.

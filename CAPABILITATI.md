@@ -1,4 +1,7 @@
-# Acoperire stock 0.6.0
+# Acoperire stock 0.6.1
+
+0.6.1 corecteaza instalarea HACS. Functiile de control si limitele fizice
+raman cele din baza 0.6.0 descrisa mai jos.
 
 | Functie descoperita | Implementare 0.6.0 | Dovada si limita |
 |---|---|---|

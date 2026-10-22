@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from functools import partial
 
+from .const import VERSION
 from .stock_protocol import (
     BUTTON_ACTIONS,
     PROFILES,
@@ -413,7 +414,7 @@ class StockRuntime:
     def diagnostics(self):
         """Allowlist only; no host, DID, credentials, raw payload or device names."""
         return {
-            "version": "0.6.0",
+            "version": VERSION,
             "mqtt_connected": self.mqtt.connected,
             "inventory_valid": self.inventory_valid,
             "shell_available": self.shell_available,

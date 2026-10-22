@@ -1,5 +1,5 @@
 DOMAIN = "aqara_m1s_local"
-VERSION = "0.6.0"
+VERSION = "0.6.1"
 CONF_MQTT_PORT = "mqtt_port"
 DEFAULT_PORT = 23
 DEFAULT_MQTT_PORT = 1884

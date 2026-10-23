@@ -1,3 +1,17 @@
+# 0.6.4 - Welcome si vizibilitate entitati native
+
+- Welcome 1..10 trimite indicii 21..30 ceruti de banca stock type 2, nu
+  indicii de alarma 1..10. ID-urile butoanelor si serviciul raman compatibile.
+- Senzor read-only pentru modul tinta al alarmei 3/21.
+- Catalogul audio/limbilor, ultima cerere audio si ultimul cod al butonului
+  sunt active implicit; migrare unica doar pentru disabled_by=integration.
+  Dezactivarile utilizatorului/dispozitivului sunt pastrate.
+- Serviciul refresh_inventory reciteste si catalogul, sistemul si native API,
+  la fel ca butonul de refresh, conform documentatiei.
+- Mapare explicita a functiilor pe platforme/entitati in MAPARE_ENTITATI.md.
+- Verificare read-only a 39 proprietati si hashurilor aplicatiilor stock.
+  Fara actuare audio, instalare HA, restart, modificare hub sau publicare.
+
 # 0.6.3 - Proprietati native si diagnostic de conexiune
 
 - Client MiIO limitat la get_properties/set_properties; token numai in memorie.

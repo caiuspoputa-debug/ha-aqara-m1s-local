@@ -75,6 +75,7 @@ PROPERTIES = [
         maximum=4,
         writable=True,
     ),
+    Property("guard_target_mode", 3, 21, "Native guard target mode", maximum=3),
     Property(
         "alarm_status",
         3,
@@ -82,9 +83,7 @@ PROPERTIES = [
         "Native alarm status",
         choices=(0, 1, 2, 3, 4, 11, 12, 13, 14, 15, 16),
     ),
-    Property(
-        "hub_button_code", 4, 1, "Last hub button code", maximum=65535, advanced=True
-    ),
+    Property("hub_button_code", 4, 1, "Last hub button code", maximum=65535),
     Property(
         "system_language",
         5,
@@ -136,7 +135,6 @@ PROPERTIES = [
         1,
         "Last native audio request",
         kind="string",
-        advanced=True,
     ),
     Property(
         "audio_repeat",
@@ -147,16 +145,13 @@ PROPERTIES = [
         maximum=1,
         writable=True,
     ),
-    Property(
-        "audio_catalog", 9, 5, "Native audio catalog", kind="string", advanced=True
-    ),
+    Property("audio_catalog", 9, 5, "Native audio catalog", kind="string"),
     Property(
         "language_catalog",
         9,
         6,
         "Native language catalog",
         kind="string",
-        advanced=True,
     ),
     Property(
         "weather_binding",

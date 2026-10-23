@@ -1,8 +1,26 @@
-# Aqara M1S Local 0.6.3 - STOCK LAB TEST
+# Aqara M1S Local 0.6.4 - STOCK LAB TEST
 
 Integrare locala pentru M1S stock cu acces Telnet deja autorizat.
 Nu este firmware si nu transforma hubul intr-un coordonator ZoH.
 Pachet local de test: nu este instalat sau publicat automat.
+
+## Corectii 0.6.4
+
+Welcome 1..10 foloseau incorect indicii 1..10 ai bancii combinate stock,
+care selecteaza alarme. Acum comenzile welcome folosesc 21..30. Numele,
+caile WAV si identificatorii butoanelor existente raman neschimbate.
+Contractul a fost verificat in aplicatia stock din backup, iar hashurile
+aplicatiilor corespund celor citite de pe hubul autorizat. Nu am pornit
+sunete sau alarme pe hub in aceasta verificare.
+
+Catalogul audio/limbilor, ultima cerere audio si ultimul cod al butonului
+sunt acum diagnostice active implicit. Migrarea 1.1 -> 1.2 reactiveaza doar
+aceste patru entitati daca vechea integrare le dezactivase implicit; nu
+reactiveaza entitati dezactivate de utilizator/dispozitiv. Se adauga modul
+tinta al alarmei, read-only. MAPARE_ENTITATI.md arata unde este fiecare functie.
+Controalele native deja implementate nu sunt declarate reparate in instalarea
+HA existenta doar pentru ca testele locale le creeaza; versiunea incarcata si
+jurnalul HA trebuie verificate daca lipsesc si dupa actualizare.
 
 ## Functii
 
@@ -11,7 +29,7 @@ Pachet local de test: nu este instalat sau publicat automat.
 - Volum sistem nativ 0..100% si limba, folosind proprietatile hubului.
 - Sonerii locale din catalog: doorbell/welcome/alarm, once prin serviciul
   stock, fara transfer WAV, FFmpeg sau Aplay. Repetare si Stop native audio.
-- Mod de paza nativ, starea alarmei, intarziere, durata, volum si sonerie
+- Mod de paza nativ, mod tinta, starea alarmei, intarziere, durata, volum si sonerie
   pentru basic/home/away/sleep. Sase switch-uri de paza personalizate,
   avansate si dezactivate initial in registrul HA.
 - Suprimarea indicatorului noaptea si interval HH:MM-HH:MM.
@@ -28,7 +46,7 @@ temperatura/lumina nu sunt eliminati.
 
 ## Citire si comenzi
 
-38 proprietati selectate au fost citite pe hubul autorizat folosind
+39 proprietati selectate au fost citite pe hubul autorizat folosind
 clientul livrat. Polling nativ 15 secunde; eroarea invalideaza disponibilitatea,
 iar valorile expira dupa 45 secunde fara citire reusita. Conexiunea API nu
 certifica sanatatea radio sau prezenta live a copiilor. IP-ul este diagnostic:
@@ -97,11 +115,11 @@ aceleasi. Nu publica actiuni sub zigbee2mqtt/... .
 
 ## Verificare si limite
 
-Citirea celor 38 de proprietati si a doua citire autentificata au fost
+Citirea celor 39 de proprietati si a doua citire autentificata au fost
 verificate pe hub. Scrierile noi sunt testate cu transport criptat sintetic
 si dubluri HA, NU prin schimbarea setarilor sau armarea dispozitivului real.
 Nu a fost pornita o instalare HA completa pentru acest build.
-0.6.3 ramane build de test, nu certificare fizica a tuturor controalelor.
+0.6.4 ramane build de test, nu certificare fizica a tuturor controalelor.
 TEST_RESULTS.json si LIVE_NATIVE_READ_VALIDATION.json din arhiva privata
 separa testele sintetice de verificarile read-only pe dispozitiv.
 

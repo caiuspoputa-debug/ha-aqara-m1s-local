@@ -24,7 +24,7 @@ from .const import (
 )
 from .mqtt_client import AqaraM1SMqttClient
 from .native_client import NativeProperties
-from .registry import RegistryCleanup
+from .registry import RegistryCleanup, enable_native_diagnostics
 from .runtime import StockRuntime
 from .telnet_mqtt import stream_factory
 
@@ -98,7 +98,11 @@ def _register_services(hass):
             ) from err
 
     async def refresh(call):
-        await resolve(call.data).async_refresh_inventory()
+        runtime = resolve(call.data)
+        await runtime.async_refresh_catalog()
+        await runtime.async_refresh_inventory()
+        await runtime.async_refresh_system()
+        await runtime.async_refresh_native()
 
     hass.services.async_register(
         DOMAIN,
@@ -117,6 +121,13 @@ def _register_services(hass):
     hass.services.async_register(
         DOMAIN, SERVICE_REFRESH, refresh, schema=vol.Schema(_SELECTOR)
     )
+
+
+async def async_migrate_entry(hass, entry):
+    if entry.version == 1 and entry.minor_version < 2:
+        enable_native_diagnostics(hass, entry)
+        hass.config_entries.async_update_entry(entry, minor_version=2)
+    return True
 
 
 async def async_setup_entry(hass, entry):

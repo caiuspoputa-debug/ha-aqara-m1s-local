@@ -38,9 +38,12 @@ class Sound:
 
     def plan(self, volume):
         integer(volume, 1, 100)
+        # Stock system_sing type 2 uses a combined bank: 1..10 are alarms,
+        # 11..20 doorbells, 21..30 welcome. The public catalog stays 1-based.
+        wire_index = self.index + 20 if self.family == "welcome" else self.index
         return (
-            f"{FAMILIES[self.family][2]};{self.index};0;1;{volume}",
-            ("-sys", "-s", self.family, str(self.index), "0", str(volume)),
+            f"{FAMILIES[self.family][2]};{wire_index};0;1;{volume}",
+            ("-sys", "-s", self.family, str(wire_index), "0", str(volume)),
         )
 
 

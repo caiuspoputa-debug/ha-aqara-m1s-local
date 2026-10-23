@@ -48,6 +48,7 @@ def login_field(value):
 
 class AqaraM1SLocalConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
+    MINOR_VERSION = 2
 
     @staticmethod
     @callback

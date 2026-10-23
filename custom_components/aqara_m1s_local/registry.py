@@ -7,6 +7,28 @@ from homeassistant.helpers import entity_registry as er
 from .const import CONF_CLEANUP, DOMAIN
 
 
+def enable_native_diagnostics(hass, entry):
+    """One-time migration, without overriding explicit user/device disables."""
+    registry = er.async_get(hass)
+    identities = {
+        f"{entry.entry_id}_native_{key}"
+        for key in (
+            "hub_button_code",
+            "last_audio_request",
+            "audio_catalog",
+            "language_catalog",
+        )
+    }
+    for registered in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if (
+            registered.platform == DOMAIN
+            and registered.domain == "sensor"
+            and registered.unique_id in identities
+            and registered.disabled_by == er.RegistryEntryDisabler.INTEGRATION
+        ):
+            registry.async_update_entity(registered.entity_id, disabled_by=None)
+
+
 def track_entities(runtime, platform, async_add_entities):
     def add(entities):
         entities = list(entities)

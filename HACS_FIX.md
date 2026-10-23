@@ -29,8 +29,8 @@ folosit de HACS; modificarea numai a arhivei locale nu repara downloadul.
 Nu declara content_in_root=true pentru structura de mai sus.
 
 Se pastreaza tagul v0.6.0 nemodificat. Fisierele corectate, inclusiv
-manifest.json cu 0.6.3, trebuie sa fie in commitul noului release v0.6.3.
-HACS va putea instala 0.6.3 numai dupa ce versiunea exista efectiv pe
+manifest.json cu 0.6.4, trebuie sa fie in commitul noului release v0.6.4.
+HACS va putea instala 0.6.4 numai dupa ce versiunea exista efectiv pe
 GitHub. Arhiva REPOSITORY ofera structura de extras in repository;
 atasarea ei ca simplu asset ZIP nu inlocuieste fisierele din repository.
 

@@ -4,13 +4,20 @@ from homeassistant.exceptions import HomeAssistantError
 from .catalog import sound_for_option
 from .const import DATA_STOCK, DOMAIN
 from .entity import StockEntity
+from .native_properties import BY_KEY
 from .registry import track_entities
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
     runtime = hass.data[DOMAIN][DATA_STOCK][entry.entry_id]
     add = track_entities(runtime, "button", async_add_entities)
-    add([RefreshInventory(entry, runtime)])
+    add(
+        [RefreshInventory(entry, runtime)]
+        + [
+            NativeStop(entry, runtime, key)
+            for key in ("stop_audio", "stop_alarm_preview")
+        ]
+    )
 
     def update():
         if not runtime.capabilities_valid:
@@ -81,3 +88,29 @@ class RefreshInventory(StockEntity, ButtonEntity):
     async def async_press(self):
         await self.runtime.async_refresh_catalog()
         await self.runtime.async_refresh_inventory()
+        await self.runtime.async_refresh_system()
+        await self.runtime.async_refresh_native()
+
+
+class NativeStop(StockEntity, ButtonEntity):
+    _attr_icon = "mdi:stop-circle"
+
+    def __init__(self, entry, runtime, key):
+        self.key = key
+        super().__init__(entry, runtime, "native_" + key, BY_KEY[key].name)
+
+    @property
+    def available(self):
+        return self.runtime.native_has(
+            "audio_catalog" if self.key == "stop_audio" else "guard_mode"
+        )
+
+    async def async_press(self):
+        try:
+            await self.runtime.async_set_native(
+                self.key, 1 if self.key == "stop_audio" else True
+            )
+        except (OSError, ValueError, TimeoutError, ConnectionError) as err:
+            raise HomeAssistantError(
+                "Native stop was not confirmed; no retry was sent"
+            ) from err

@@ -15,6 +15,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
             for key, name in (
                 ("mqtt", "Stock MQTT connection"),
                 ("inventory", "Valid stock inventory"),
+                ("native", "Hub connection"),
+                ("alarm_active", "Native alarm active"),
             )
         ]
     )
@@ -37,16 +39,40 @@ class StockStatus(StockEntity, BinarySensorEntity):
     def __init__(self, entry, runtime, key, name):
         super().__init__(entry, runtime, key, name)
         self.key = key
-        if key == "mqtt":
+        if key in ("mqtt", "native"):
             self._attr_device_class = "connectivity"
 
     @property
     def is_on(self):
+        if self.key == "native":
+            return self.runtime.native_connected
+        if self.key == "alarm_active":
+            return self.runtime.native_values.get("alarm_status", 0) != 0
         return (
             self.runtime.mqtt.connected
             if self.key == "mqtt"
             else self.runtime.inventory_valid
         )
+
+    @property
+    def available(self):
+        return (
+            self.runtime.native_has("alarm_status")
+            if self.key == "alarm_active"
+            else True
+        )
+
+    @property
+    def extra_state_attributes(self):
+        if self.key == "native":
+            return {
+                "source": "authenticated_native_property_read",
+                "means_radio_ready": False,
+                "last_success": self.runtime.native_last_success.isoformat()
+                if self.runtime.native_last_success
+                else None,
+            }
+        return None
 
 
 class ChildBinary(ChildFieldEntity, BinarySensorEntity):

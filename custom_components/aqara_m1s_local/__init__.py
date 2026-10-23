@@ -23,6 +23,7 @@ from .const import (
     SERVICE_REFRESH,
 )
 from .mqtt_client import AqaraM1SMqttClient
+from .native_client import NativeProperties
 from .registry import RegistryCleanup
 from .runtime import StockRuntime
 from .telnet_mqtt import stream_factory
@@ -36,6 +37,7 @@ PLATFORMS = [
     Platform.SELECT,
     Platform.SENSOR,
     Platform.SWITCH,
+    Platform.TEXT,
 ]
 _SELECTOR = {
     vol.Optional("entry_id"): str,
@@ -151,6 +153,7 @@ async def async_setup_entry(hass, entry):
         audio_limit=entry.options.get(CONF_AUDIO_LIMIT, 5),
         allow_child_control=entry.options.get(CONF_CHILD_CONTROL, False),
         stale_seconds=entry.options.get(CONF_STALE_SECONDS, 86400),
+        native=NativeProperties(client),
     )
     runtime.mqtt_transport = transport
     data[DATA_STOCK][entry.entry_id] = runtime

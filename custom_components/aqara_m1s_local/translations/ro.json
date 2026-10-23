@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Aqara M1S Stock Lab",
-        "description": "Foloseste accesul Telnet deja autorizat. MQTT stock este accesat intern printr-o a doua sesiune autentificata, fara port LAN nou sau instalare pe hub. Utilizati numai reteaua locala de incredere. Nu conecta ZoH/ZHA/Zigbee2MQTT la UART-ul coordonatorului stock.",
+        "description": "Foloseste accesul Telnet deja autorizat. Proprietatile native folosesc API-ul MiIO autentificat existent; MQTT foloseste a doua sesiune catre brokerul intern. Nu sunt instalate fisiere sau porturi noi pe hub. Utilizati numai reteaua locala de incredere.",
         "data": {
           "host": "IP sau nume de retea al hubului",
           "port": "Port Telnet existent",
@@ -22,7 +22,7 @@
     "step": {
       "init": {
         "title": "Limite stock lab",
-        "description": "Curatarea elimina numai entitatile vechi ale acestei intrari, dupa inventar si catalog valide. Copiii disparuti necesita doua inventare valide consecutive; indisponibilitatea nu provoaca stergerea. Modul telnet foloseste brokerul intern existent; direct necesita un port LAN deja disponibil. Volumele peste 5 si controlul copiilor sunt opt-in, nevalidate fizic.",
+        "description": "Curatarea priveste numai aceasta intrare, dupa descoperire valida; copiii disparuti necesita doua inventare valide. Unavailable nu sterge entitati. Limita per cerere de sunet este separata de volumul sistemului. Scrierile native nu sunt reluate; controalele noi necesita validare fizica. MQTT direct necesita un port LAN existent.",
         "data": {
           "native_audio_limit": "Volum maxim pentru cererea de sunet nativ (%)",
           "allow_child_control": "Permite comenzi catre switch-uri copil mapate (experimental)",

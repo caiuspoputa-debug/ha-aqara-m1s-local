@@ -13,6 +13,7 @@ from functools import partial
 from .catalog import COMMAND as CATALOG_COMMAND
 from .catalog import parse_catalog, sound_for_option
 from .const import VERSION
+from .native_properties import BY_KEY, READ_KEYS, validate_write
 from .stock_protocol import (
     BUTTON_ACTIONS,
     PROFILES,
@@ -32,7 +33,6 @@ from .system_status import parse_snapshot
 _LOGGER = logging.getLogger(__name__)
 INVENTORY_COMMAND = "head -c 65537 /data/zigbee/device.info"
 GATEWAY_FIELDS = {
-    "0.3.85": Field("ambient_light_raw", "0.3.85"),
     "8.0.2024": Field("zigbee_channel", "8.0.2024"),
     "8.0.2080": Field("zigbee_version", "8.0.2080"),
     "8.0.2109": Field("pairing_status", "8.0.2109"),
@@ -67,8 +67,17 @@ class StockRuntime:
         audio_limit=5,
         allow_child_control=False,
         stale_seconds=86400,
+        native=None,
     ):
         self.client, self.mqtt, self.executor = client, mqtt, executor
+        self.native = native
+        self.native_values = {}
+        self.native_time = 0
+        self.native_available = False
+        self.native_pending = {}
+        self.native_generation = 0
+        self.native_last_success = None
+        self._native_lock = asyncio.Lock()
         self.audio_limit = integer(audio_limit, 1, 100)
         self.allow_child_control = allow_child_control
         self.stale_seconds = integer(stale_seconds, 60, 604800)
@@ -143,8 +152,92 @@ class StockRuntime:
         await self.async_refresh_catalog()
         await self.async_refresh_inventory()
         await self.async_refresh_system()
+        await self.async_refresh_native()
         await self.mqtt.start()
         self._task(self._maintain())
+        if self.native is not None:
+            self._task(self._maintain_native())
+
+    async def _maintain_native(self):
+        while True:
+            await asyncio.sleep(15)
+            await self.async_refresh_native()
+
+    @property
+    def native_connected(self):
+        return self.native_available and time.monotonic() - self.native_time < 45
+
+    def native_has(self, key):
+        return self.native_connected and key in self.native_values
+
+    def _native_received(self, values):
+        self.native_values = values
+        self.native_time = time.monotonic()
+        self.native_available = bool(values)
+        self.native_generation += 1
+        self.native_last_success = datetime.now(UTC)
+        for key in list(self.native_pending):
+            if values.get(key) == self.native_pending[key]:
+                del self.native_pending[key]
+
+    async def async_refresh_native(self):
+        if self.native is None or self._closed:
+            return
+        async with self._native_lock:
+            try:
+                values = await self.executor(self.native.read, READ_KEYS)
+            except (OSError, ValueError, TimeoutError, ConnectionError):
+                self.native_available = False
+                self.counters["native_read_errors"] += 1
+            else:
+                self._native_received(values)
+            self.notify()
+
+    async def async_set_native(self, key, value):
+        if self._closed or self.native is None or not self.native_connected:
+            raise ConnectionError("Native API unavailable; command not sent")
+        prop, value = validate_write(key, value, self.native_values)
+        if prop.read and key not in self.native_values:
+            raise ValueError("Property was not returned by this hub")
+        await self._native_write(((key, value),))
+
+    async def _native_write(self, items):
+        async with self._native_lock:
+            if self._closed or not self.native_connected:
+                raise ConnectionError("Native API unavailable; command not sent")
+            self.last_command = "pending_native_write"
+            self.native_pending.update(items)
+            try:
+                await self.executor(self.native.write, items)
+            except asyncio.CancelledError:
+                self.native_available = False
+                self.last_command = "cancelled_outcome_unknown"
+                self.notify()
+                raise
+            except (OSError, ValueError, TimeoutError, ConnectionError):
+                self.native_available = False
+                self.last_command = "failed_or_outcome_unknown"
+                self.notify()
+                raise
+            self.last_command = "native_acknowledged_readback_pending"
+            try:
+                values = await self.executor(self.native.read, READ_KEYS)
+            except (OSError, ValueError, TimeoutError, ConnectionError):
+                self.native_available = False
+                self.last_command = "native_acknowledged_readback_unavailable"
+            else:
+                self._native_received(values)
+                readable = [key for key, _ in items if BY_KEY[key].read]
+                self.last_command = (
+                    "native_readback_confirmed"
+                    if readable
+                    and all(key not in self.native_pending for key in readable)
+                    else "native_acknowledged_readback_pending"
+                )
+                for key, _ in items:
+                    if not BY_KEY[key].read:
+                        self.native_pending.pop(key, None)
+            self.notify()
 
     async def _maintain(self):
         while True:
@@ -164,6 +257,8 @@ class StockRuntime:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
         await self.mqtt.stop()
+        if self.native is not None:
+            await self.executor(self.native.close)
         await self.executor(self.client.close)
         self._listeners.clear()
         self._event_listeners.clear()
@@ -394,6 +489,23 @@ class StockRuntime:
     async def async_ring(self, rgb, brightness):
         plan = ring_plan(rgb, brightness)
         async with self._audio_light_lock:
+            if self.native is not None:
+                if not all(
+                    self.native_has(key)
+                    for key in ("ring_on", "ring_color", "ring_brightness")
+                ):
+                    raise ConnectionError("Native ring readback unavailable")
+                if brightness == 0 or max(rgb) == 0:
+                    items = (("ring_on", False),)
+                else:
+                    color = int(rgb[0]) << 16 | int(rgb[1]) << 8 | int(rgb[2])
+                    items = (
+                        ("ring_color", color),
+                        ("ring_brightness", max(1, round(brightness * 100 / 255))),
+                        ("ring_on", True),
+                    )
+                await self._native_write(items)
+                return
             for name, value, args in plan:
                 await self._cli("basis.argb", name, value, args)
             self.ring = (tuple(rgb), brightness if max(rgb) else 0)
@@ -416,9 +528,11 @@ class StockRuntime:
                 value,
                 args,
             )
-            # Stock audio can touch the logical light cache. There is no proven getter.
+            # Stock audio can change logical light state; refresh the native getter.
             self.ring_stale = True
             self.notify()
+        if self.native is not None:
+            await self.async_refresh_native()
 
     async def async_child_switch(self, did, key, state):
         child = self.children.get(did)
@@ -467,5 +581,10 @@ class StockRuntime:
             "child_control_enabled": self.allow_child_control,
             "native_audio_limit": self.audio_limit,
             "system": dict(self.system),
+            "native_connected": self.native_connected,
+            "native_properties_observed": sorted(self.native_values),
+            "native_last_success": self.native_last_success.isoformat()
+            if self.native_last_success
+            else None,
             "physical_test_scope": "ring, native doorbell, one WXKG11LM; other profiles not lab-validated",
         }

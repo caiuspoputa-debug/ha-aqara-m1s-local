@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Aqara M1S Stock Lab",
-        "description": "Use existing authorized Telnet access. Stock MQTT is reached internally through a second authenticated session, without a new LAN port or installation on the hub. Use only a trusted LAN. Do not connect ZoH/ZHA/Zigbee2MQTT to the stock coordinator UART.",
+        "description": "Use existing authorized Telnet access. Native properties use the hub's existing authenticated MiIO API; MQTT uses a second authenticated session to its internal broker. No files or new ports are installed on the hub. Use only a trusted LAN.",
         "data": {
           "host": "Hub IP address or hostname",
           "port": "Existing Telnet port",
@@ -22,7 +22,7 @@
     "step": {
       "init": {
         "title": "Stock lab limits",
-        "description": "Cleanup removes obsolete entities from this entry only, after valid inventory and sound discovery; missing children require two consecutive valid inventories. Unavailable status alone never triggers deletion. Telnet uses the existing internal stock broker; direct mode requires an already existing LAN endpoint. Audio levels above 5 and child control are opt-in and not physically validated.",
+        "description": "Cleanup removes obsolete entities from this entry only after valid discovery; missing children require two valid inventories. Unavailable never triggers deletion. The sound request limit is separate from native system volume. Native writes are not retried; new controls still require physical validation. Direct MQTT requires an existing LAN endpoint.",
         "data": {
           "native_audio_limit": "Maximum native sound volume (%)",
           "allow_child_control": "Allow mapped child switch commands (experimental)",

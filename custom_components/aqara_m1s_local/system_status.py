@@ -19,7 +19,7 @@ test -r /proc/self/comm || exit 1
 for f in /proc/[0-9]*/comm; do
   read -r name < "$f" 2>/dev/null || continue
   case "$name" in
-    ha_basis) basis=1;; mzigbee_agent) zigbee=1;; miio_client) miio=1;;
+    ha_basis|mha_basis) basis=1;; mzigbee_agent) zigbee=1;; miio_client) miio=1;;
     mosquitto) broker=1;; nc) helpers=$((helpers+1));;
   esac
 done

@@ -1,4 +1,18 @@
-# 0.6.2 - Stock real, evenimente si curatarea entitatilor
+# 0.6.3 - Proprietati native si diagnostic de conexiune
+
+- Client MiIO limitat la get_properties/set_properties; token numai in memorie.
+- 38 proprietati M1S citite pe hub cu clientul livrat; polling la 15 secunde.
+- Inel cu readback, volum sistem, limba, catalog, repetare/stop, configurari
+  de paza, indicator nocturn si protectie la stergere accidentala.
+- Conexiune autentificata si IP in HA, fara modificarea adresei hubului.
+- ACK individual si readback; fara retry de scriere/fallback la timeout.
+- Eliminat luxul nevalidat; fara temperatura cip, HomeKit sau modele AC/priza.
+- Pastrate evenimentele copiilor si curatarea stricta a registrului.
+- Detectia procesului stock recunoaste si numele mha_basis.
+- Scrieri testate sintetic; fara instalare, armare, redare, schimbari de
+  setari pe hub/HA sau publicare automata.
+
+## 0.6.2 - Stock real, evenimente si curatarea entitatilor
 
 - MQTT implicit prin sesiune Telnet autentificata spre brokerul intern;
   nu mai depinde de un port LAN 1884 absent pe hubul stock.

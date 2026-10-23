@@ -1,11 +1,30 @@
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.exceptions import HomeAssistantError
 
+from .const import DATA_STOCK, DOMAIN
 from .entity import ChildFieldEntity, discover
+from .native_entity import NativeEntity, entities
+from .registry import track_entities
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
+    runtime = hass.data[DOMAIN][DATA_STOCK][entry.entry_id]
+    track_entities(runtime, "switch", async_add_entities)(
+        entities(entry, runtime, "switch", PropertySwitch)
+    )
     discover(hass, entry, async_add_entities, "switch", ChildSwitch)
+
+
+class PropertySwitch(NativeEntity, SwitchEntity):
+    @property
+    def is_on(self):
+        return None if self.value is None else self.value == 1
+
+    async def async_turn_on(self, **kwargs):
+        await self.async_write(1)
+
+    async def async_turn_off(self, **kwargs):
+        await self.async_write(0)
 
 
 class ChildSwitch(ChildFieldEntity, SwitchEntity):

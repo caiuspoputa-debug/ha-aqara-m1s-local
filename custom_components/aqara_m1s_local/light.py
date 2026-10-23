@@ -30,23 +30,59 @@ class StockRing(StockEntity, LightEntity):
 
     @property
     def is_on(self):
+        if self.runtime.native is not None:
+            return self.runtime.native_values.get("ring_on")
         return None if self.runtime.ring is None else self.runtime.ring[1] > 0
 
     @property
     def brightness(self):
+        if self.runtime.native is not None:
+            value = self.runtime.native_values.get("ring_brightness")
+            return round(value * 255 / 100) if value is not None else None
         return self.runtime.ring[1] if self.runtime.ring else None
 
     @property
     def rgb_color(self):
+        if self.runtime.native is not None:
+            value = self.runtime.native_values.get("ring_color")
+            return (
+                ((value >> 16) & 255, (value >> 8) & 255, value & 255)
+                if value is not None
+                else None
+            )
         return self.runtime.ring[0] if self.runtime.ring else None
 
     @property
     def extra_state_attributes(self):
+        if self.runtime.native is not None:
+            return {
+                "state_source": "native_get_properties",
+                "physical_state_known": False,
+                "readback_pending": any(
+                    key in self.runtime.native_pending
+                    for key in ("ring_on", "ring_brightness", "ring_color")
+                ),
+            }
         return {
             "state_source": "last_rpc_accepted_request_not_physical_readback",
             "request_cache_stale": self.runtime.ring_stale,
             "physical_state_known": False,
         }
+
+    @property
+    def assumed_state(self):
+        return self.runtime.native is None
+
+    @property
+    def available(self):
+        return (
+            all(
+                self.runtime.native_has(key)
+                for key in ("ring_on", "ring_brightness", "ring_color")
+            )
+            if self.runtime.native is not None
+            else self.runtime.shell_available
+        )
 
     async def async_turn_on(self, **kwargs):
         rgb = kwargs.get(ATTR_RGB_COLOR, self.rgb_color or (255, 255, 255))

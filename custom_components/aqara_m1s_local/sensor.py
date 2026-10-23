@@ -2,6 +2,8 @@ from homeassistant.components.sensor import SensorEntity
 
 from .const import DATA_STOCK, DOMAIN
 from .entity import ChildFieldEntity, StockEntity, discover, discover_inventory
+from .native_entity import NativeEntity, entities
+from .native_properties import catalogs
 from .registry import track_entities
 from .runtime import GATEWAY_FIELDS
 
@@ -23,6 +25,10 @@ async def async_setup_entry(hass, entry, async_add_entities):
             SystemSensor(entry, runtime, key)
             for key in ("uptime", "load_1m", "memory_used_pct", "wifi_operstate")
         ]
+    )
+    async_add_entities(
+        entities(entry, runtime, "sensor", PropertySensor)
+        + [HubAddress(entry, runtime)]
     )
     discover(hass, entry, async_add_entities, "sensor", ChildSensor)
     discover_inventory(
@@ -125,3 +131,52 @@ class SystemSensor(StockEntity, SensorEntity):
     @property
     def native_value(self):
         return self.runtime.system.get(self.key)
+
+
+class PropertySensor(NativeEntity, SensorEntity):
+    @property
+    def native_value(self):
+        if self.prop.key == "audio_catalog":
+            sounds, _ = catalogs(self.runtime.native_values)
+            return sum(len(group) for group in sounds.values())
+        if self.prop.key == "language_catalog":
+            return ", ".join(catalogs(self.runtime.native_values)[1])
+        if self.prop.key == "weather_binding":
+            return "associated" if self.value else "not_associated"
+        if isinstance(self.value, str):
+            return self.value[:200] or "none"
+        return self.value
+
+    @property
+    def extra_state_attributes(self):
+        attributes = super().extra_state_attributes
+        if self.prop.key == "audio_catalog":
+            attributes["available_sounds"] = catalogs(self.runtime.native_values)[0]
+        if self.prop.key == "hub_button_code":
+            attributes["means_live_button_event"] = False
+        return attributes
+
+
+class HubAddress(StockEntity, SensorEntity):
+    _attr_entity_category = "diagnostic"
+    _attr_icon = "mdi:ip-network"
+
+    def __init__(self, entry, runtime):
+        super().__init__(entry, runtime, "hub_ip_address", "Hub IP address")
+
+    @property
+    def available(self):
+        return self.runtime.native_connected and bool(
+            self.runtime.native and self.runtime.native.ip
+        )
+
+    @property
+    def native_value(self):
+        return self.runtime.native.ip if self.runtime.native else None
+
+    @property
+    def extra_state_attributes(self):
+        return {
+            "source": "authenticated_native_api_peer",
+            "configured_host": self.runtime.client.host,
+        }
